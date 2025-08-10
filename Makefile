@@ -42,6 +42,9 @@ endif
 ifndef VIDEO_FILENAME
 	VIDEO_FILENAME = output.mp4
 endif
+ifndef GIF_FILENAME
+	GIF_FILENAME = output.gif
+endif
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
 ifndef FFMPEG
@@ -62,7 +65,7 @@ include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.pr
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video clean-frames clean-video record art help
+.PHONY: video gif clean-frames clean-video clean-gif record art help
 
 # Default help target
 help:
@@ -73,6 +76,7 @@ help:
 	@echo "  make           - Build interactive .app"  
 	@echo "  make run       - Build and run interactive .app"
 	@echo "  make video     - Create MP4 video (uses settings below)"
+	@echo "  make gif       - Create animated GIF (smaller file, web-friendly)"
 	@echo "  make art       - Alias for 'make video'"
 	@echo ""
 	@echo "Video Settings (override in config.make):"
@@ -82,14 +86,17 @@ help:
 	@echo "  VIDEO_FPS      = $(VIDEO_FPS)"
 	@echo "  VIDEO_DURATION = $(VIDEO_DURATION)s"
 	@echo "  VIDEO_FILENAME = $(VIDEO_FILENAME)"
+	@echo "  GIF_FILENAME   = $(GIF_FILENAME)"
 	@echo ""
 	@echo "Custom Recording:"
 	@echo "  make record VIDEO_WIDTH=3840 VIDEO_HEIGHT=2160 VIDEO_FPS=60"
+	@echo "  make gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 GIF_FILENAME=demo.gif"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean-frames    - Remove temporary frame files"
-	@echo "  make clean-video     - Remove generated MP4 files" 
-	@echo "  make clean-all       - Clean everything (build + frames + videos)"
+	@echo "  make clean-video     - Remove generated MP4 files"
+	@echo "  make clean-gif       - Remove generated GIF files" 
+	@echo "  make clean-all       - Clean everything (build + frames + videos + gifs)"
 
 # Build and run for video recording
 video: Release
@@ -105,6 +112,24 @@ video: Release
 	@echo "🔧 Creating MP4 with ffmpeg..."
 	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -c:v libx264 -pix_fmt yuv420p -crf 18 $(VIDEO_FILENAME)
 	@echo "✅ Video saved as $(VIDEO_FILENAME)"
+	@$(MAKE) clean-frames
+
+# Build and run for GIF recording
+gif: Release
+	@echo "🎨 Starting GIF recording..."
+	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
+	@echo "   Framerate:  $(VIDEO_FPS) fps"
+	@echo "   Duration:   $(VIDEO_DURATION) seconds"
+	@echo "   Output:     $(GIF_FILENAME)"
+	@echo ""
+	@mkdir -p bin/data/frames
+	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+	@echo ""
+	@echo "🔧 Creating GIF with ffmpeg..."
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) /tmp/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -i /tmp/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(GIF_FILENAME)
+	@rm -f /tmp/palette.png
+	@echo "✅ GIF saved as $(GIF_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Alias for artists who prefer 'make art'
@@ -133,6 +158,16 @@ portrait:
 square:
 	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30
 
+# Quick GIF presets (optimized for web sharing)
+gif-small:
+	@$(MAKE) gif VIDEO_WIDTH=400 VIDEO_HEIGHT=400 VIDEO_FPS=15 GIF_FILENAME=small.gif
+
+gif-web:
+	@$(MAKE) gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 VIDEO_FPS=20 GIF_FILENAME=web.gif
+
+gif-square:
+	@$(MAKE) gif VIDEO_WIDTH=500 VIDEO_HEIGHT=500 VIDEO_FPS=24 GIF_FILENAME=square.gif
+
 # Clean frame files
 clean-frames:
 	@echo "🧹 Cleaning frame files..."
@@ -143,8 +178,13 @@ clean-video:
 	@echo "🧹 Cleaning video files..."
 	@rm -f *.mp4
 
-# Clean everything including frames and videos
-clean-all: clean clean-frames clean-video
+# Clean GIF files
+clean-gif:
+	@echo "🧹 Cleaning GIF files..."
+	@rm -f *.gif
+
+# Clean everything including frames, videos, and GIFs
+clean-all: clean clean-frames clean-video clean-gif
 	@echo "🧹 Everything cleaned!"
 
 ################################################################################

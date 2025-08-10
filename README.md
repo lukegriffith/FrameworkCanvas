@@ -6,8 +6,9 @@ FrameworkCanvas combines the power of openFrameworks with a streamlined make-bas
 
 ## ✨ Features
 
-- **Dual-Mode Operation**: Switch between interactive app and video recording modes
-- **Zero-Config Video Recording**: Frame-by-frame PNG export with automatic MP4 generation
+- **Dual-Mode Operation**: Switch between interactive app and video/GIF recording modes
+- **Zero-Config Media Generation**: Frame-by-frame PNG export with automatic MP4/GIF creation
+- **Multiple Output Formats**: Generate high-quality MP4 videos or web-friendly animated GIFs
 - **Artist-Friendly Workflow**: Simple `make art` commands with preset formats
 - **Neovim + Make Integration**: No Xcode required - pure terminal workflow
 - **Customizable Output**: Configure resolution, framerate, duration, and quality
@@ -26,8 +27,12 @@ make run
 # Create a video - generates MP4 automatically
 make art
 
+# Create an animated GIF - perfect for web sharing
+make gif
+
 # Quick presets
-make square    # 1080x1080 for social media
+make square    # 1080x1080 for social media  
+make gif-web   # 800x600 optimized GIF
 make 4k        # 3840x2160 for high quality
 make portrait  # 1080x1920 for vertical videos
 ```
@@ -40,12 +45,14 @@ make portrait  # 1080x1920 for vertical videos
 make           # Build interactive .app
 make run       # Build and run interactive app  
 make video     # Create MP4 video (default settings)
+make gif       # Create animated GIF (smaller, web-friendly)
 make art       # Alias for 'make video'
 make help      # Show complete usage guide
 ```
 
-### Video Presets
+### Media Presets
 
+**Video (MP4):**
 ```bash
 make hd        # 1920x1080 @ 30fps
 make 4k        # 3840x2160 @ 30fps  
@@ -53,14 +60,25 @@ make square    # 1080x1080 @ 30fps
 make portrait  # 1080x1920 @ 30fps
 ```
 
+**GIF (Optimized for Web):**
+```bash
+make gif-small # 400x400 @ 15fps - tiny file size
+make gif-web   # 800x600 @ 20fps - balanced quality/size
+make gif-square # 500x500 @ 24fps - social media ready
+```
+
 ### Custom Recording
 
 ```bash
-# Override any setting on the fly
+# Override any video setting on the fly
 make video VIDEO_WIDTH=2560 VIDEO_HEIGHT=1440 VIDEO_FPS=60 VIDEO_DURATION=15
 
-# Record with custom filename
+# Custom GIF with specific settings
+make gif VIDEO_WIDTH=600 VIDEO_HEIGHT=400 VIDEO_FPS=12 GIF_FILENAME=my_art.gif
+
+# Custom filenames
 make video VIDEO_FILENAME=my_artwork.mp4
+make gif GIF_FILENAME=demo_animation.gif
 ```
 
 ## ⚙️ Configuration
@@ -77,8 +95,9 @@ VIDEO_HEIGHT = 1080
 VIDEO_FPS = 30
 VIDEO_DURATION = 10
 VIDEO_FILENAME = output.mp4
+GIF_FILENAME = output.gif
 
-# FFmpeg path (if not in PATH)
+# FFmpeg path (if not in PATH)  
 FFMPEG = ffmpeg
 ```
 
@@ -103,12 +122,19 @@ FrameworkCanvas/
 └── README.md           # This file
 ```
 
-## 🎥 How Video Recording Works
+## 🎥 How Media Generation Works
 
+### Video (MP4)
 1. **Frame Generation**: App runs in headless mode, saving each frame as PNG
-2. **Automatic Encoding**: FFmpeg converts frame sequence to H.264 MP4
+2. **H.264 Encoding**: FFmpeg converts frames to high-quality MP4 with H.264 codec
 3. **Cleanup**: Temporary frames are automatically removed
 4. **Output**: Final video saved to project directory
+
+### GIF Animation  
+1. **Frame Generation**: Same PNG frame sequence as video
+2. **Palette Optimization**: FFmpeg generates optimal color palette for better quality
+3. **GIF Encoding**: Two-pass process creates smooth, web-optimized animated GIF
+4. **Cleanup**: Temporary frames and palette files removed automatically
 
 The demo animation features rotating colorful circles - perfect for testing or as a starting point for your own creations.
 
@@ -124,7 +150,8 @@ The demo animation features rotating colorful circles - perfect for testing or a
 ```bash
 make clean-frames    # Remove temporary frame files
 make clean-video     # Remove generated MP4s
-make clean-all       # Clean everything (build + frames + videos)
+make clean-gif       # Remove generated GIF files
+make clean-all       # Clean everything (build + frames + videos + gifs)
 ```
 
 ## 🔧 Advanced Usage
