@@ -2,6 +2,8 @@
 
 > A complete openFrameworks digital art template with dual-mode video recording
 
+![Demo Animation](small.gif)
+
 FrameworkCanvas combines the power of openFrameworks with a streamlined make-based workflow, perfect for digital artists who want both interactive creativity and high-quality video output.
 
 ## ✨ Features
