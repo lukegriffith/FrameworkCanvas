@@ -1,5 +1,5 @@
 ################################################################################
-# OPENFRAMEWORKS DIGITAL ART TEMPLATE WITH VIDEO RECORDING
+# FrameworkCanvas - openFrameworks Digital Art Template
 # Complete self-contained Makefile for interactive apps and MP4 generation
 ################################################################################
 
@@ -66,8 +66,8 @@ include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.pr
 
 # Default help target
 help:
-	@echo "openFrameworks Digital Art Template"
-	@echo "===================================="
+	@echo "FrameworkCanvas - Digital Art Template"
+	@echo "======================================"
 	@echo ""
 	@echo "Basic Usage:"
 	@echo "  make           - Build interactive .app"  
@@ -152,6 +152,7 @@ clean-all: clean clean-frames clean-video
 ################################################################################
 
 info:
+	@echo "FrameworkCanvas v1.0"
 	@echo "Project: $(APPNAME)"
 	@echo "OF Root: $(OF_ROOT)"
 	@echo "Output Type: $(OUTPUT_TYPE)"
