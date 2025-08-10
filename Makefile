@@ -88,6 +88,11 @@ help:
 	@echo "  VIDEO_FILENAME = $(VIDEO_FILENAME)"
 	@echo "  GIF_FILENAME   = $(GIF_FILENAME)"
 	@echo ""
+	@echo "Instagram Presets:"
+	@echo "  make instagram       - 1080x1080 feed post (default)"
+	@echo "  make instagram-story - 1080x1920 story/reel format"
+	@echo "  make instagram-reel  - 1080x1920 reel format"
+	@echo ""
 	@echo "Custom Recording:"
 	@echo "  make record VIDEO_WIDTH=3840 VIDEO_HEIGHT=2160 VIDEO_FPS=60"
 	@echo "  make gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 GIF_FILENAME=demo.gif"
@@ -158,6 +163,22 @@ portrait:
 square:
 	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30
 
+# Instagram optimized presets  
+instagram-feed:
+	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30 VIDEO_FILENAME=instagram_feed.mp4
+
+instagram-story:
+	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_story.mp4
+
+instagram-reel:
+	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_reel.mp4
+
+instagram-portrait:
+	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1350 VIDEO_FPS=30 VIDEO_FILENAME=instagram_portrait.mp4
+
+# Alias for most common Instagram format
+instagram: instagram-feed
+
 # Quick GIF presets (optimized for web sharing)
 gif-small:
 	@$(MAKE) gif VIDEO_WIDTH=400 VIDEO_HEIGHT=400 VIDEO_FPS=15 GIF_FILENAME=small.gif
@@ -167,6 +188,13 @@ gif-web:
 
 gif-square:
 	@$(MAKE) gif VIDEO_WIDTH=500 VIDEO_HEIGHT=500 VIDEO_FPS=24 GIF_FILENAME=square.gif
+
+# Instagram GIF presets
+gif-instagram-feed:
+	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=24 GIF_FILENAME=instagram_feed.gif
+
+gif-instagram-story:
+	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=24 GIF_FILENAME=instagram_story.gif
 
 # Clean frame files
 clean-frames:

@@ -31,10 +31,10 @@ make art
 make gif
 
 # Quick presets
-make square    # 1080x1080 for social media  
-make gif-web   # 800x600 optimized GIF
+make instagram # 1080x1080 Instagram feed post
+make gif-web   # 800x600 optimized GIF  
 make 4k        # 3840x2160 for high quality
-make portrait  # 1080x1920 for vertical videos
+make square    # 1080x1080 for general social media
 ```
 
 ## 🎨 Usage
@@ -52,6 +52,14 @@ make help      # Show complete usage guide
 
 ### Media Presets
 
+**Instagram Optimized:**
+```bash
+make instagram         # 1080x1080 feed post (most common)
+make instagram-story   # 1080x1920 stories & reels
+make instagram-reel    # 1080x1920 reel format  
+make instagram-portrait # 1080x1350 portrait post
+```
+
 **Video (MP4):**
 ```bash
 make hd        # 1920x1080 @ 30fps
@@ -62,9 +70,11 @@ make portrait  # 1080x1920 @ 30fps
 
 **GIF (Optimized for Web):**
 ```bash
-make gif-small # 400x400 @ 15fps - tiny file size
-make gif-web   # 800x600 @ 20fps - balanced quality/size
-make gif-square # 500x500 @ 24fps - social media ready
+make gif-small           # 400x400 @ 15fps - tiny file size
+make gif-web             # 800x600 @ 20fps - balanced quality/size
+make gif-square          # 500x500 @ 24fps - social media ready
+make gif-instagram-feed  # 1080x1080 @ 24fps - Instagram ready
+make gif-instagram-story # 1080x1920 @ 24fps - Story format
 ```
 
 ### Custom Recording
