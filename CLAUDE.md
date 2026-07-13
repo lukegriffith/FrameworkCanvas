@@ -103,6 +103,15 @@ Configure defaults in `config.make`:
 - FPS counter and frame information display
 - Full mouse/keyboard event handling available
 
+### Handling User-Supplied File Paths
+`ofFile`/`ofToDataPath` resolve relative paths against `bin/data/`, not the
+process CWD. Any path that comes from an env var or Makefile-forwarded CLI
+arg (e.g. a script/config/asset path) will silently fail to open if passed
+straight to `ofFile()`. Use `std::ifstream` directly, or resolve to an
+absolute path before handing it to OF's file API. On the Makefile side,
+apply `override VAR := $(abspath $(VAR))` for any such path variable —
+plain `:=` won't override a value passed on the `make` command line.
+
 ## Dependencies
 
 - **openFrameworks 0.12.1+** - Core framework
