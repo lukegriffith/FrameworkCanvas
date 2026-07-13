@@ -30,4 +30,7 @@ class ofApp : public ofBaseApp{
 		
 		void saveFrame();
 		void loadVideoSettings();
+		void drawScene(int w, int h);
+
+		ofFbo recordFbo;
 };

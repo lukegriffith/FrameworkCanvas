@@ -23,7 +23,12 @@ void ofApp::setup(){
 		ofSetFrameRate(60);
 		cout << "Interactive app mode" << endl;
 	}
-	
+
+	// Offscreen buffer at the recording resolution, independent of window/screen size
+	// (grabScreen() gets clamped by macOS to the actual window bounds, corrupting
+	// tall/large frame captures - see bugs.txt #1)
+	recordFbo.allocate(videoWidth, videoHeight, GL_RGBA);
+
 	// Add some basic visual content for demo
 	ofBackground(0);
 }
@@ -37,32 +42,46 @@ void ofApp::update(){
 
 //--------------------------------------------------------------
 void ofApp::draw(){
-	// Demo animation - rotating colorful circle
-	ofPushMatrix();
-	ofTranslate(ofGetWidth()/2, ofGetHeight()/2);
-	ofRotateDeg(ofGetFrameNum() * 2);
-	
-	ofSetColor(255, 100, 100);
-	ofDrawCircle(0, 0, 100 + 50 * sin(ofGetFrameNum() * 0.1));
-	
-	ofSetColor(100, 255, 100);
-	ofDrawCircle(150, 0, 30);
-	
-	ofSetColor(100, 100, 255);
-	ofDrawCircle(-150, 0, 30);
-	ofPopMatrix();
-	
-	// Show recording status
 	if (isRecording) {
+		// Render at the fixed recording resolution into an offscreen buffer,
+		// independent of the actual window/screen size (see bugs.txt #1)
+		recordFbo.begin();
+		ofClear(0, 0, 0, 255);
+		drawScene(videoWidth, videoHeight);
+		recordFbo.end();
+
+		// Preview scaled to whatever size the window actually is
+		recordFbo.draw(0, 0, ofGetWidth(), ofGetHeight());
+
 		ofSetColor(255, 0, 0);
 		ofDrawBitmapString("Recording frame " + ofToString(frameCount+1) + "/" + ofToString(totalFrames), 10, 20);
 		saveFrame();
 		frameCount++;
 	} else {
+		drawScene(ofGetWidth(), ofGetHeight());
+
 		ofSetColor(255);
 		ofDrawBitmapString("Interactive mode - Press 'r' to start recording", 10, 20);
 		ofDrawBitmapString("FPS: " + ofToString(ofGetFrameRate()), 10, 40);
 	}
+}
+
+//--------------------------------------------------------------
+void ofApp::drawScene(int w, int h){
+	// Demo animation - rotating colorful circle
+	ofPushMatrix();
+	ofTranslate(w/2, h/2);
+	ofRotateDeg(ofGetFrameNum() * 2);
+
+	ofSetColor(255, 100, 100);
+	ofDrawCircle(0, 0, 100 + 50 * sin(ofGetFrameNum() * 0.1));
+
+	ofSetColor(100, 255, 100);
+	ofDrawCircle(150, 0, 30);
+
+	ofSetColor(100, 100, 255);
+	ofDrawCircle(-150, 0, 30);
+	ofPopMatrix();
 }
 
 //--------------------------------------------------------------
@@ -148,9 +167,11 @@ void ofApp::loadVideoSettings(){
 
 //--------------------------------------------------------------
 void ofApp::saveFrame(){
+	ofPixels pixels;
+	recordFbo.readToPixels(pixels);
 	ofImage img;
-	img.grabScreen(0, 0, ofGetWidth(), ofGetHeight());
-	
+	img.setFromPixels(pixels);
+
 	string filename = ofToDataPath("frames/frame_" + ofToString(frameCount, 6, '0') + ".png");
 	bool saved = img.save(filename);
 	

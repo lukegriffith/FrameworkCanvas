@@ -148,7 +148,7 @@ record:
 # Run the interactive app
 run: Release
 	@echo "🚀 Starting interactive app..."
-	@export OUTPUT_TYPE=app && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+	@export OUTPUT_TYPE=app VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 
 # Quick video with different settings
 hd: 
