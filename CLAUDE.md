@@ -17,7 +17,7 @@ FrameworkCanvas is an openFrameworks digital art template that provides dual-mod
 
 ### Key Components
 - **Dual Mode System**: Uses `OUTPUT_TYPE` environment variable to switch between "app" (interactive) and "video" (recording) modes
-- **Video Recording**: Frame-by-frame PNG export with FFmpeg conversion to MP4/GIF
+- **Video Recording**: Frame-by-frame TGA export with FFmpeg conversion to MP4/GIF
 - **Environment-based Configuration**: Video settings passed through environment variables from Makefile to C++ application
 
 ## Development Commands
@@ -96,6 +96,12 @@ Configure defaults in `config.make`:
 3. In video mode: app runs headless, saves frames to `bin/data/frames/`
 4. FFmpeg converts frames to final MP4/GIF format
 5. Temporary frames are automatically cleaned up
+
+### Frame Capture Format
+Frames are saved as uncompressed TGA, not PNG. PNG's zlib compression is the
+dominant per-frame cost during recording (~9x slower at 1080p) and these are
+throwaway intermediates the Makefile deletes right after ffmpeg assembles the
+final video, so there's no reason to pay for compression.
 
 ### Interactive Mode Features
 - Real-time preview with 60fps
