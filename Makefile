@@ -59,21 +59,28 @@ export VIDEO_FPS
 export VIDEO_DURATION
 
 # call the project makefile!
-include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
+# (guarded so that `make setup` can still run and give useful guidance even
+#  when OF_ROOT isn't valid yet - see the setup target below)
+ifneq ($(wildcard $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk),)
+	include $(OF_ROOT)/libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
+endif
 
 ################################################################################
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup
 
 # Default help target
 help:
 	@echo "FrameworkCanvas - Digital Art Template"
 	@echo "======================================"
 	@echo ""
+	@echo "First time here? Run this first:"
+	@echo "  make setup     - Check/locate your openFrameworks install (OF_ROOT)"
+	@echo ""
 	@echo "Basic Usage:"
-	@echo "  make           - Build interactive .app"  
+	@echo "  make           - Build interactive .app"
 	@echo "  make run       - Build and run interactive .app"
 	@echo "  make video     - Create MP4 video (uses settings below)"
 	@echo "  make gif       - Create animated GIF (smaller file, web-friendly)"
@@ -102,6 +109,58 @@ help:
 	@echo "  make clean-video     - Remove generated MP4 files"
 	@echo "  make clean-gif       - Remove generated GIF files" 
 	@echo "  make clean-all       - Clean everything (build + frames + videos + gifs)"
+
+# Check that OF_ROOT (from config.make, or an env/CLI override) points at a
+# real openFrameworks install, and if not, try to help find one. Safe to run
+# any time - it never modifies config.make itself.
+OF_MARKER := libs/openFrameworksCompiled/project/makefileCommon/compile.project.mk
+
+setup:
+	@bash -c ' \
+	of_root="$(OF_ROOT)"; \
+	marker="$(OF_MARKER)"; \
+	if [ -f "$$of_root/$$marker" ]; then \
+		echo "OF_ROOT looks good: $$of_root"; \
+		exit 0; \
+	fi; \
+	echo "OF_ROOT is not set to a valid openFrameworks install."; \
+	echo "  Currently: $$of_root"; \
+	echo ""; \
+	echo "Searching common install locations..."; \
+	candidates=""; \
+	for base in "$$HOME/Downloads" "$$HOME/openFrameworks" "$$HOME" "/usr/local/opt" "/opt"; do \
+		[ -d "$$base" ] || continue; \
+		for d in "$$base"/of_v* "$$base"/openFrameworks*; do \
+			[ -e "$$d" ] || continue; \
+			if [ -f "$$d/$$marker" ]; then \
+				candidates="$$candidates $$d"; \
+			fi; \
+		done; \
+	done; \
+	count=$$(echo $$candidates | wc -w | tr -d "[:space:]"); \
+	echo ""; \
+	if [ "$$count" -eq 1 ]; then \
+		found=$$(echo $$candidates | xargs); \
+		echo "Found an openFrameworks install:"; \
+		echo "  $$found"; \
+		echo ""; \
+		echo "Add/update this line in config.make:"; \
+		echo "  OF_ROOT = $$found"; \
+	else \
+		if [ "$$count" -gt 1 ]; then \
+			echo "Found multiple possible openFrameworks installs (ambiguous, pick one):"; \
+			for c in $$candidates; do echo "  $$c"; done; \
+			echo ""; \
+		else \
+			echo "Could not find an openFrameworks install automatically."; \
+			echo ""; \
+		fi; \
+		echo "Download openFrameworks from https://openframeworks.cc/download/"; \
+		echo "then set OF_ROOT in config.make to point at the extracted folder, e.g.:"; \
+		echo "  OF_ROOT = /path/to/of_v0.12.1_osx_release"; \
+	fi; \
+	exit 1; \
+	'
 
 # Build and run for video recording
 video: Release

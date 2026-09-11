@@ -23,6 +23,9 @@ FrameworkCanvas combines the power of openFrameworks with a streamlined make-bas
 git clone <your-repo>
 cd FrameworkCanvas
 
+# Check/locate your openFrameworks install (run this once after cloning)
+make setup
+
 # Interactive mode - opens a window for real-time creativity
 make run
 

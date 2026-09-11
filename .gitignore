@@ -1,5 +1,7 @@
 # Build output
-bin/
+bin/*
+!bin/data/
+bin/data/frames/
 obj/
 
 # macOS
