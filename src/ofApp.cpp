@@ -172,12 +172,12 @@ void ofApp::saveFrame(){
 	ofImage img;
 	img.setFromPixels(pixels);
 
-	string filename = ofToDataPath("frames/frame_" + ofToString(frameCount, 6, '0') + ".png");
+	string filename = ofToDataPath("frames/frame_" + ofToString(frameCount, 6, '0') + ".tga");
 	bool saved = img.save(filename);
-	
-	if (saved) {
-		cout << "Saved: " << filename << endl;
-	} else {
+
+	if (!saved) {
 		cout << "Failed to save: " << filename << endl;
+	} else if (frameCount % 30 == 0) {
+		cout << "Saved frame " << frameCount << endl;
 	}
 }

@@ -115,7 +115,7 @@ video: Release
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating MP4 with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -c:v libx264 -pix_fmt yuv420p -crf 18 $(VIDEO_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(VIDEO_FILENAME)
 	@echo "✅ Video saved as $(VIDEO_FILENAME)"
 	@$(MAKE) clean-frames
 
@@ -131,8 +131,8 @@ gif: Release
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating GIF with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) /tmp/palette.png
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.png -i /tmp/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(GIF_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) /tmp/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -i /tmp/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(GIF_FILENAME)
 	@rm -f /tmp/palette.png
 	@echo "✅ GIF saved as $(GIF_FILENAME)"
 	@$(MAKE) clean-frames
