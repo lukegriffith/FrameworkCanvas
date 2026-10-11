@@ -1,38 +1,35 @@
 #pragma once
 
+// HARNESS: not for sketch authors. Write sketches in sketches/<name>/sketch.cpp
+// against src/Sketch.h instead.
+
 #include "ofMain.h"
 #include "Settings.h"
+#include "Sketch.h"
 
-class ofApp : public ofBaseApp{
+class ofApp : public ofBaseApp {
 	public:
 		void setup();
 		void update();
 		void draw();
-		
-		void keyPressed(int key);
-		void keyReleased(int key);
-		void mouseMoved(int x, int y);
-		void mouseDragged(int x, int y, int button);
-		void mousePressed(int x, int y, int button);
-		void mouseReleased(int x, int y, int button);
-		void mouseEntered(int x, int y);
-		void mouseExited(int x, int y);
-		void windowResized(int w, int h);
-		void dragEvent(ofDragInfo dragInfo);
-		void gotMessage(ofMessage msg);
-		
-	private:
-		// Video recording variables
-		bool isRecording;
-		int frameCount;
-		int totalFrames;
-		Settings settings;
-		string outputType;
-		int videoWidth, videoHeight, videoFPS, videoDuration;
-		
-		void saveFrame();
-		void loadVideoSettings();
-		void drawScene(int w, int h);
 
-		ofFbo recordFbo;
+		void keyPressed(int key);
+		void mousePressed(int x, int y, int button);
+
+	private:
+		Settings settings;
+		Ctx ctx;
+		std::unique_ptr<Sketch> sketch;
+		ofFbo fbo;                 // output-sized render target (recording only)
+
+		bool recording = false;
+		int frameCount = 0;        // frames elapsed while recording
+		int totalFrames = 0;
+		int renderStart = 0, renderEnd = 0;
+		float startTime = 0;
+		std::string framesDir;
+
+		void beginRecording();
+		void fillCtx(int frame);
+		void saveFrame();
 };

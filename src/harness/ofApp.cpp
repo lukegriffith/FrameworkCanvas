@@ -2,43 +2,84 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-	loadVideoSettings();
-	
-	cout << "OUTPUT_TYPE: " << outputType << endl;
+	settings = Settings::fromEnv();
+	totalFrames = settings.totalFrames();
+
+	cout << "OUTPUT_TYPE: " << settings.outputType << endl;
+	cout << "Video settings: " << settings.width << "x" << settings.height << " @ " << settings.fps << "fps for " << settings.duration << "s" << endl;
 	cout << "seed=" << settings.seed << " renderStart=" << settings.renderStart << " renderEnd=" << settings.renderEnd << endl;
-	cout << "Video settings: " << videoWidth << "x" << videoHeight << " @ " << videoFPS << "fps for " << videoDuration << "s" << endl;
-	
-	if (outputType == "video") {
+
+	ofSeedRandom(settings.seed);
+
+	ctx.fps = settings.fps;
+	ctx.duration = settings.duration;
+	ctx.seed = settings.seed;
+	ctx.params = settings.params;
+
+	if (settings.outputType == "video") {
 		// Render as fast as possible; frame timing comes from the frame index, not the clock.
-		// Window stays small: only the FBO needs to be output-sized.
+		// The window is only a small preview: the FBO is what is output-sized.
 		ofSetVerticalSync(false);
 		ofSetFrameRate(0);
-		isRecording = true;
-		frameCount = 0;
-		totalFrames = videoDuration * videoFPS;
+		float s = std::min(1.0f, std::min(640.0f / settings.width, 640.0f / settings.height));
+		ofSetWindowShape(std::max(1, (int)(settings.width * s)), std::max(1, (int)(settings.height * s)));
 		ofSetWindowTitle("Recording: " + ofToString(totalFrames) + " frames");
 		cout << "Video mode: recording " << totalFrames << " frames" << endl;
-		
-		// Create frames directory
-		ofDirectory::createDirectory(ofToDataPath("frames"), false, false);
+		beginRecording();
+		renderStart = settings.renderStart;
+		renderEnd = settings.renderEnd;
 	} else {
-		isRecording = false;
 		ofSetFrameRate(60);
 		cout << "Interactive app mode" << endl;
 	}
 
 	// Offscreen buffer at the recording resolution, independent of window/screen size
 	// (grabScreen() gets clamped by macOS to the actual window bounds, corrupting
-	// tall/large frame captures - see bugs.txt #1)
-	recordFbo.allocate(videoWidth, videoHeight, GL_RGBA);
+	// tall/large frame captures).
+	fbo.allocate(settings.width, settings.height, GL_RGBA);
 
-	// Add some basic visual content for demo
+	startTime = ofGetElapsedTimef();
+	fillCtx(0);
+	sketch = makeSketch();
+	sketch->setup(ctx);
+
 	ofBackground(0);
 }
 
 //--------------------------------------------------------------
+void ofApp::beginRecording(){
+	recording = true;
+	frameCount = 0;
+	renderStart = 0;
+	renderEnd = totalFrames - 1;
+
+	framesDir = settings.framesDir.empty() ? ofToDataPath("frames", true) : settings.framesDir;
+	ofDirectory::createDirectory(framesDir, false, true);
+}
+
+//--------------------------------------------------------------
+// Time is deterministic when recording (frame / fps) and wall clock otherwise,
+// so a sketch runs at the same speed in both modes.
+void ofApp::fillCtx(int frame){
+	ctx.recording = recording;
+	ctx.frame = frame;
+	if (recording) {
+		ctx.w = settings.width;
+		ctx.h = settings.height;
+		ctx.t = frame / (float)settings.fps;
+	} else {
+		ctx.w = ofGetWidth();
+		ctx.h = ofGetHeight();
+		ctx.t = ofGetElapsedTimef() - startTime;
+		ctx.frame = ofGetFrameNum();
+	}
+	float p = ctx.t / ctx.duration;
+	ctx.progress = p - std::floor(p);
+}
+
+//--------------------------------------------------------------
 void ofApp::update(){
-	if (isRecording && frameCount >= totalFrames) {
+	if (recording && frameCount > renderEnd) {
 		ofExit();
 	}
 }
@@ -46,25 +87,33 @@ void ofApp::update(){
 //--------------------------------------------------------------
 void ofApp::draw(){
 	// ofExit() in update() doesn't stop the draw that follows it; don't capture an extra frame
-	if (isRecording && frameCount >= totalFrames) return;
+	if (recording && frameCount > renderEnd) return;
 
-	if (isRecording) {
-		// Render at the fixed recording resolution into an offscreen buffer,
-		// independent of the actual window/screen size (see bugs.txt #1)
-		recordFbo.begin();
-		ofClear(0, 0, 0, 255);
-		drawScene(videoWidth, videoHeight);
-		recordFbo.end();
+	if (recording) {
+		// Frames before renderStart are skipped entirely (no draw, no save)
+		if (frameCount >= renderStart) {
+			fillCtx(frameCount);
 
-		// Preview scaled to whatever size the window actually is
-		recordFbo.draw(0, 0, ofGetWidth(), ofGetHeight());
+			fbo.begin();
+			ofClear(0, 0, 0, 255);
+			ofSetColor(255);
+			sketch->draw(ctx);
+			fbo.end();
 
-		ofSetColor(255, 0, 0);
-		ofDrawBitmapString("Recording frame " + ofToString(frameCount+1) + "/" + ofToString(totalFrames), 10, 20);
-		saveFrame();
+			// Preview scaled to whatever size the window actually is
+			ofSetColor(255);
+			fbo.draw(0, 0, ofGetWidth(), ofGetHeight());
+			ofSetColor(255, 0, 0);
+			ofDrawBitmapString("Recording frame " + ofToString(frameCount + 1) + "/" + ofToString(totalFrames), 10, 20);
+
+			saveFrame();
+		}
 		frameCount++;
 	} else {
-		drawScene(ofGetWidth(), ofGetHeight());
+		fillCtx(0);
+		ofClear(0, 0, 0, 255);
+		ofSetColor(255);
+		sketch->draw(ctx);
 
 		ofSetColor(255);
 		ofDrawBitmapString("Interactive mode - Press 'r' to start recording", 10, 20);
@@ -73,103 +122,29 @@ void ofApp::draw(){
 }
 
 //--------------------------------------------------------------
-void ofApp::drawScene(int w, int h){
-	// Demo animation - rotating colorful circle
-	ofPushMatrix();
-	ofTranslate(w/2, h/2);
-	ofRotateDeg(ofGetFrameNum() * 2);
-
-	ofSetColor(255, 100, 100);
-	ofDrawCircle(0, 0, 100 + 50 * sin(ofGetFrameNum() * 0.1));
-
-	ofSetColor(100, 255, 100);
-	ofDrawCircle(150, 0, 30);
-
-	ofSetColor(100, 100, 255);
-	ofDrawCircle(-150, 0, 30);
-	ofPopMatrix();
-}
-
-//--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-	if (key == 'r' && !isRecording) {
+	if (key == 'r' && !recording) {
 		// Start manual recording in app mode
-		isRecording = true;
-		frameCount = 0;
-		totalFrames = videoDuration * videoFPS;
-		ofSetFrameRate(videoFPS);
-		ofDirectory::createDirectory(ofToDataPath("frames"), false, false);
+		ofSetFrameRate(settings.fps);
+		beginRecording();
+		return;
 	}
-}
-
-//--------------------------------------------------------------
-void ofApp::keyReleased(int key){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseMoved(int x, int y){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseDragged(int x, int y, int button){
-
+	sketch->keyPressed(key, ctx);
 }
 
 //--------------------------------------------------------------
 void ofApp::mousePressed(int x, int y, int button){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseReleased(int x, int y, int button){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseEntered(int x, int y){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::mouseExited(int x, int y){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::windowResized(int w, int h){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::gotMessage(ofMessage msg){
-
-}
-
-//--------------------------------------------------------------
-void ofApp::dragEvent(ofDragInfo dragInfo){ 
-
-}
-
-//--------------------------------------------------------------
-void ofApp::loadVideoSettings(){
-	settings = Settings::fromEnv();
-	outputType = settings.outputType;
-	videoWidth = settings.width;
-	videoHeight = settings.height;
-	videoFPS = settings.fps;
-	videoDuration = settings.duration;
+	sketch->mousePressed(x, y, button, ctx);
 }
 
 //--------------------------------------------------------------
 void ofApp::saveFrame(){
 	ofPixels pixels;
-	recordFbo.readToPixels(pixels);
+	fbo.readToPixels(pixels);
 	ofImage img;
 	img.setFromPixels(pixels);
 
-	string filename = ofToDataPath("frames/frame_" + ofToString(frameCount, 6, '0') + ".tga");
+	string filename = framesDir + "/frame_" + ofToString(frameCount, 6, '0') + ".tga";
 	bool saved = img.save(filename);
 
 	if (!saved) {
