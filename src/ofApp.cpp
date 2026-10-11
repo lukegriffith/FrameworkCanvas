@@ -8,8 +8,10 @@ void ofApp::setup(){
 	cout << "Video settings: " << videoWidth << "x" << videoHeight << " @ " << videoFPS << "fps for " << videoDuration << "s" << endl;
 	
 	if (outputType == "video") {
-		ofSetWindowShape(videoWidth, videoHeight);
-		ofSetFrameRate(videoFPS);
+		// Render as fast as possible; frame timing comes from the frame index, not the clock.
+		// Window stays small: only the FBO needs to be output-sized.
+		ofSetVerticalSync(false);
+		ofSetFrameRate(0);
 		isRecording = true;
 		frameCount = 0;
 		totalFrames = videoDuration * videoFPS;
@@ -42,6 +44,9 @@ void ofApp::update(){
 
 //--------------------------------------------------------------
 void ofApp::draw(){
+	// ofExit() in update() doesn't stop the draw that follows it; don't capture an extra frame
+	if (isRecording && frameCount >= totalFrames) return;
+
 	if (isRecording) {
 		// Render at the fixed recording resolution into an offscreen buffer,
 		// independent of the actual window/screen size (see bugs.txt #1)
