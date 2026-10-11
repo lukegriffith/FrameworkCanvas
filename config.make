@@ -162,7 +162,7 @@ VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 VIDEO_FPS = 30
 VIDEO_DURATION = 10
-VIDEO_FILENAME = output.mp4
+# VIDEO_FILENAME / GIF_FILENAME default to <sketch>.mp4 / <sketch>.gif in out/<sketch>/
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
 FFMPEG = ffmpeg

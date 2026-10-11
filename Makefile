@@ -39,11 +39,12 @@ endif
 ifndef VIDEO_DURATION
 	VIDEO_DURATION = 10
 endif
+# Default output names follow the sketch; files land in out/<sketch>/
 ifndef VIDEO_FILENAME
-	VIDEO_FILENAME = output.mp4
+	VIDEO_FILENAME = $(SKETCH).mp4
 endif
 ifndef GIF_FILENAME
-	GIF_FILENAME = output.gif
+	GIF_FILENAME = $(SKETCH).gif
 endif
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
@@ -69,6 +70,11 @@ $(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
 endif
 export SKETCH
 override PROJECT_EXTERNAL_SOURCE_PATHS := $(abspath sketches/$(SKETCH))
+
+# Per-sketch output: out/<sketch>/ holds frames and finished media
+OUT_DIR := out/$(SKETCH)
+override FRAMES_DIR := $(abspath $(OUT_DIR)/frames)
+export FRAMES_DIR
 
 # call the project makefile!
 # (guarded so that `make setup` can still run and give useful guidance even
@@ -182,12 +188,12 @@ video: Release
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(VIDEO_FILENAME)"
 	@echo ""
-	@mkdir -p bin/data/frames
+	@mkdir -p $(FRAMES_DIR)
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating MP4 with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(VIDEO_FILENAME)
-	@echo "✅ Video saved as $(VIDEO_FILENAME)"
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
+	@echo "✅ Video saved as $(OUT_DIR)/$(VIDEO_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Build and run for GIF recording
@@ -198,14 +204,14 @@ gif: Release
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(GIF_FILENAME)"
 	@echo ""
-	@mkdir -p bin/data/frames
+	@mkdir -p $(FRAMES_DIR)
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating GIF with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) /tmp/palette.png
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -i /tmp/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(GIF_FILENAME)
-	@rm -f /tmp/palette.png
-	@echo "✅ GIF saved as $(GIF_FILENAME)"
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
+	@rm -f $(OUT_DIR)/palette.png
+	@echo "✅ GIF saved as $(OUT_DIR)/$(GIF_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Alias for artists who prefer 'make art'
@@ -270,17 +276,17 @@ gif-instagram-story:
 # Clean frame files
 clean-frames:
 	@echo "🧹 Cleaning frame files..."
-	@rm -rf bin/data/frames/
+	@rm -rf $(FRAMES_DIR)
 
 # Clean video files
 clean-video:
 	@echo "🧹 Cleaning video files..."
-	@rm -f *.mp4
+	@rm -f out/*/*.mp4
 
 # Clean GIF files
 clean-gif:
 	@echo "🧹 Cleaning GIF files..."
-	@rm -f *.gif
+	@rm -f out/*/*.gif
 
 # Clean everything including frames, videos, and GIFs
 clean-all: clean clean-frames clean-video clean-gif
