@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ofMain.h"
+#include "Settings.h"
 
 class ofApp : public ofBaseApp{
 	public:
@@ -25,6 +26,7 @@ class ofApp : public ofBaseApp{
 		bool isRecording;
 		int frameCount;
 		int totalFrames;
+		Settings settings;
 		string outputType;
 		int videoWidth, videoHeight, videoFPS, videoDuration;
 		

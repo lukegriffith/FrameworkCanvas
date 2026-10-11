@@ -5,6 +5,7 @@ void ofApp::setup(){
 	loadVideoSettings();
 	
 	cout << "OUTPUT_TYPE: " << outputType << endl;
+	cout << "seed=" << settings.seed << " renderStart=" << settings.renderStart << " renderEnd=" << settings.renderEnd << endl;
 	cout << "Video settings: " << videoWidth << "x" << videoHeight << " @ " << videoFPS << "fps for " << videoDuration << "s" << endl;
 	
 	if (outputType == "video") {
@@ -153,21 +154,12 @@ void ofApp::dragEvent(ofDragInfo dragInfo){
 
 //--------------------------------------------------------------
 void ofApp::loadVideoSettings(){
-	// Load settings from environment variables (set by Makefile)
-	char* envOutputType = getenv("OUTPUT_TYPE");
-	outputType = envOutputType ? string(envOutputType) : "app";
-	
-	char* envWidth = getenv("VIDEO_WIDTH");
-	videoWidth = envWidth ? ofToInt(envWidth) : 1920;
-	
-	char* envHeight = getenv("VIDEO_HEIGHT");
-	videoHeight = envHeight ? ofToInt(envHeight) : 1080;
-	
-	char* envFPS = getenv("VIDEO_FPS");
-	videoFPS = envFPS ? ofToInt(envFPS) : 30;
-	
-	char* envDuration = getenv("VIDEO_DURATION");
-	videoDuration = envDuration ? ofToInt(envDuration) : 10;
+	settings = Settings::fromEnv();
+	outputType = settings.outputType;
+	videoWidth = settings.width;
+	videoHeight = settings.height;
+	videoFPS = settings.fps;
+	videoDuration = settings.duration;
 }
 
 //--------------------------------------------------------------
