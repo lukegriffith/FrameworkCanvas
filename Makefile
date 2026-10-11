@@ -93,7 +93,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke
 
 # Default help target
 help:
@@ -242,6 +242,34 @@ DRAFT_FPS ?= 15
 DRAFT_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(DRAFT_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
 draft:
 	@$(MAKE) video VIDEO_WIDTH=$(DRAFT_WIDTH) VIDEO_HEIGHT=$(DRAFT_HEIGHT) VIDEO_FPS=$(DRAFT_FPS) VIDEO_FILENAME=draft.mp4
+
+# Smoke test: render tiny, sample first/middle/last frames, fail if ALL are one flat
+# colour (empty draw(), crash before drawing, everything off-screen). A single flat
+# frame only warns, since fade-ins from black are legitimate.
+SMOKE_WIDTH ?= 320
+SMOKE_FPS ?= 10
+SMOKE_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(SMOKE_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
+smoke: build
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video VIDEO_WIDTH=$(SMOKE_WIDTH) VIDEO_HEIGHT=$(SMOKE_HEIGHT) VIDEO_FPS=$(SMOKE_FPS) RENDER_START=0 RENDER_END= \
+		./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || { echo "smoke: app failed to run"; exit 1; }; \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(SMOKE_FPS) )); \
+	flat=0; checked=0; \
+	for F in 0 $$(( TOTAL / 2 )) $$(( TOTAL - 1 )); do \
+		FILE=$(FRAMES_DIR)/frame_$$(printf %06d $$F).tga; \
+		[ -f "$$FILE" ] || { echo "smoke: frame $$F was not written"; rm -rf $(FRAMES_DIR); exit 1; }; \
+		STATS=$$($(FFMPEG) -v error -i $$FILE -vf "signalstats,metadata=print:file=-" -f null - 2>&1); \
+		RANGE=0; \
+		for C in Y U V; do \
+			LO=$$(echo "$$STATS" | sed -n "s/.*signalstats.$${C}MIN=//p"); HI=$$(echo "$$STATS" | sed -n "s/.*signalstats.$${C}MAX=//p"); \
+			[ "$$LO" != "$$HI" ] && RANGE=1; \
+		done; \
+		checked=$$(( checked + 1 )); \
+		if [ $$RANGE -eq 0 ]; then flat=$$(( flat + 1 )); echo "smoke: warning: frame $$F is a single flat colour"; fi; \
+	done; \
+	rm -rf $(FRAMES_DIR); \
+	if [ $$flat -eq $$checked ]; then echo "smoke: FAIL: all sampled frames are blank"; exit 1; fi; \
+	echo "✅ smoke OK ($$(( checked - flat ))/$$checked sampled frames have content)"
 
 # Build and run for video recording
 video: build
