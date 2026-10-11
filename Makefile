@@ -39,16 +39,37 @@ endif
 ifndef VIDEO_DURATION
 	VIDEO_DURATION = 10
 endif
+# Default output names follow the sketch; files land in out/<sketch>/
 ifndef VIDEO_FILENAME
-	VIDEO_FILENAME = output.mp4
+	VIDEO_FILENAME = $(SKETCH_NAME)$(if $(FORMAT),_$(FORMAT)).mp4
 endif
 ifndef GIF_FILENAME
-	GIF_FILENAME = output.gif
+	GIF_FILENAME = $(SKETCH_NAME)$(if $(FORMAT),_$(FORMAT)).gif
 endif
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
 ifndef FFMPEG
 	FFMPEG = ffmpeg
+endif
+
+# Named output formats: name:WIDTHxHEIGHTxFPS.
+# `make video FORMAT=instagram-story` (or the alias `make instagram-story`) sets
+# VIDEO_WIDTH/HEIGHT/FPS from this table. Explicit VIDEO_* on the command line still win.
+VIDEO_FORMATS := hd 4k square portrait instagram-feed instagram-story instagram-reel instagram-portrait
+GIF_FORMATS := gif-small gif-web gif-square gif-instagram-feed gif-instagram-story
+FORMATS := hd:1920x1080x30 4k:3840x2160x30 square:1080x1080x30 portrait:1080x1920x30 \
+           instagram-feed:1080x1080x30 instagram-story:1080x1920x30 instagram-reel:1080x1920x30 \
+           instagram-portrait:1080x1350x30 \
+           gif-small:400x400x15 gif-web:800x600x20 gif-square:500x500x24 \
+           gif-instagram-feed:1080x1080x24 gif-instagram-story:1080x1920x24
+ifdef FORMAT
+  FORMAT_SPEC := $(patsubst $(FORMAT):%,%,$(filter $(FORMAT):%,$(FORMATS)))
+  ifeq ($(FORMAT_SPEC),)
+    $(error unknown FORMAT '$(FORMAT)'. Known: $(subst :, ,$(foreach f,$(FORMATS),$(firstword $(subst :, ,$(f))))))
+  endif
+  VIDEO_WIDTH  := $(word 1,$(subst x, ,$(FORMAT_SPEC)))
+  VIDEO_HEIGHT := $(word 2,$(subst x, ,$(FORMAT_SPEC)))
+  VIDEO_FPS    := $(word 3,$(subst x, ,$(FORMAT_SPEC)))
 endif
 
 # Export variables so they're available to the compiled application
@@ -57,6 +78,52 @@ export VIDEO_WIDTH
 export VIDEO_HEIGHT
 export VIDEO_FPS
 export VIDEO_DURATION
+
+################################################################################
+# SKETCH SELECTION
+# Each sketch lives in sketches/<name>/ and defines makeSketch() (see src/Sketch.h).
+# Only the chosen sketch directory is compiled and linked alongside src/.
+################################################################################
+SKETCH ?= demo
+ifeq ($(wildcard sketches/$(SKETCH)/sketch.cpp),)
+$(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
+endif
+export SKETCH
+# Sketches may be nested (e.g. _examples/particles); filenames use the last component
+SKETCH_NAME = $(notdir $(SKETCH))
+
+# Optional partial render: RENDER_START/RENDER_END are inclusive frame indices
+RENDER_START ?= 0
+export RENDER_START
+override PROJECT_EXTERNAL_SOURCE_PATHS := $(abspath sketches/$(SKETCH))
+
+# Optional per-sketch parameters, handed to the sketch as ctx.params without recompiling.
+# Picks up sketches/<name>/params.json automatically; PARAMS_FILE=path overrides it.
+# The path is made absolute because OF resolves relative paths against bin/data (see CLAUDE.md).
+ifndef PARAMS_FILE
+  ifneq ($(wildcard sketches/$(SKETCH)/params.json),)
+    PARAMS_FILE := sketches/$(SKETCH)/params.json
+  endif
+endif
+ifdef PARAMS_FILE
+  override PARAMS_FILE := $(abspath $(PARAMS_FILE))
+  export PARAMS_FILE
+endif
+
+# Sketch objects land directly in obj/<platform>/<config>/ (not under src/), and their
+# .d files name the sketch source they came from. If that sketch is renamed or deleted,
+# the stale .d makes every later build fail with "No rule to make target .../sketch.cpp".
+# Clear them whenever the selected sketch changes. Cheap: only the sketch recompiles.
+ifneq ($(shell cat obj/.sketch 2>/dev/null),$(SKETCH))
+  SKETCH_OBJ_RESET := $(shell find obj -mindepth 3 -maxdepth 3 \( -name '*.o' -o -name '*.d' \) -delete 2>/dev/null; mkdir -p obj; printf '%s' '$(SKETCH)' > obj/.sketch)
+endif
+
+# Per-sketch output: out/<sketch>/ holds frames and finished media
+OUT_DIR := out/$(SKETCH)
+override FRAMES_DIR := $(abspath $(OUT_DIR)/frames)
+export FRAMES_DIR
+
+override PLATFORM_RUN_COMMAND = echo "🚀 Starting interactive app..." && OUTPUT_TYPE=app ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 
 # call the project makefile!
 # (guarded so that `make setup` can still run and give useful guidance even
@@ -69,46 +136,36 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke
 
 # Default help target
 help:
-	@echo "FrameworkCanvas - Digital Art Template"
-	@echo "======================================"
+	@echo "FrameworkCanvas: write a sketch, look at it, ship it."
 	@echo ""
-	@echo "First time here? Run this first:"
-	@echo "  make setup     - Check/locate your openFrameworks install (OF_ROOT)"
+	@echo "First time: make setup        (check/locate OF_ROOT)"
 	@echo ""
-	@echo "Basic Usage:"
-	@echo "  make           - Build interactive .app"
-	@echo "  make run       - Build and run interactive .app"
-	@echo "  make video     - Create MP4 video (uses settings below)"
-	@echo "  make gif       - Create animated GIF (smaller file, web-friendly)"
-	@echo "  make art       - Alias for 'make video'"
+	@echo "Agent loop (SKETCH=<name> picks sketches/<name>/, default demo):"
+	@echo "  make check            compile only; prints OK or filtered errors"
+	@echo "  make smoke            fail if the output is blank"
+	@echo "  make frame T=2.5      still at t=2.5s   -> out/<sketch>/frame_2.5.png"
+	@echo "  make sheet N=8        contact sheet     -> out/<sketch>/sheet.png"
+	@echo "  make draft            480p 15fps preview -> out/<sketch>/draft.mp4"
+	@echo "  make video            final MP4         -> out/<sketch>/<sketch>.mp4"
+	@echo "  make gif              final GIF         -> out/<sketch>/<sketch>.gif"
 	@echo ""
-	@echo "Video Settings (override in config.make):"
-	@echo "  OUTPUT_TYPE    = $(OUTPUT_TYPE)"
-	@echo "  VIDEO_WIDTH    = $(VIDEO_WIDTH)" 
-	@echo "  VIDEO_HEIGHT   = $(VIDEO_HEIGHT)"
-	@echo "  VIDEO_FPS      = $(VIDEO_FPS)"
-	@echo "  VIDEO_DURATION = $(VIDEO_DURATION)s"
-	@echo "  VIDEO_FILENAME = $(VIDEO_FILENAME)"
-	@echo "  GIF_FILENAME   = $(GIF_FILENAME)"
+	@echo "Interactive: make run   (press r to record)"
 	@echo ""
-	@echo "Instagram Presets:"
-	@echo "  make instagram       - 1080x1080 feed post (default)"
-	@echo "  make instagram-story - 1080x1920 story/reel format"
-	@echo "  make instagram-reel  - 1080x1920 reel format"
+	@echo "Options (any target):"
+	@echo "  SKETCH=name           which sketch (default: $(SKETCH))"
+	@echo "  FORMAT=name           $(subst :, ,$(foreach f,$(FORMATS),$(firstword $(subst :, ,$(f)))))"
+	@echo "  VIDEO_WIDTH/HEIGHT/FPS/DURATION   current: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT) @ $(VIDEO_FPS)fps, $(VIDEO_DURATION)s"
+	@echo "  SEED=n                random seed (default 1)"
+	@echo "  PARAMS_FILE=path      JSON passed to the sketch as ctx.params"
+	@echo "  RENDER_START/END=n    render only this frame range"
 	@echo ""
-	@echo "Custom Recording:"
-	@echo "  make record VIDEO_WIDTH=3840 VIDEO_HEIGHT=2160 VIDEO_FPS=60"
-	@echo "  make gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 GIF_FILENAME=demo.gif"
+	@echo "Aliases: each FORMAT name is also a target, e.g. make instagram-story, make gif-web"
 	@echo ""
-	@echo "Cleanup:"
-	@echo "  make clean-frames    - Remove temporary frame files"
-	@echo "  make clean-video     - Remove generated MP4 files"
-	@echo "  make clean-gif       - Remove generated GIF files" 
-	@echo "  make clean-all       - Clean everything (build + frames + videos + gifs)"
+	@echo "Cleanup: make clean-frames | clean-video | clean-gif | clean-all"
 
 # Check that OF_ROOT (from config.make, or an env/CLI override) points at a
 # real openFrameworks install, and if not, try to help find one. Safe to run
@@ -162,38 +219,123 @@ setup:
 	exit 1; \
 	'
 
+# Quiet build: prints nothing on success, filtered compiler errors on failure.
+# All media targets depend on this instead of Release so their output stays short
+# (OF's Release target prints hundreds of lines on every run, even when up to date).
+build:
+	@out=$$($(MAKE) Release 2>&1); rc=$$?; \
+	if [ $$rc -ne 0 ]; then \
+		echo "$$out" | grep -E -A3 "error:|Undefined symbols|ld: |\*\*\*" | head -40; \
+		exit 1; \
+	fi
+
+# Compile only. Prints OK on success. For fast edit/compile loops.
+check: build
+	@echo "OK"
+
+# Render a single still at time T (seconds) to out/<sketch>/frame_<T>.png
+T ?= 0
+frame: build
+	@F=$$(awk 'BEGIN{printf "%d", $(T)*$(VIDEO_FPS)+0.5}'); \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
+	if [ $$F -ge $$TOTAL ]; then echo "T=$(T) is past the end ($(VIDEO_DURATION)s)"; exit 1; fi; \
+	rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video RENDER_START=$$F RENDER_END=$$F ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
+	$(FFMPEG) -y -v error -i $(FRAMES_DIR)/frame_$$(printf %06d $$F).tga -frames:v 1 $(OUT_DIR)/frame_$(T).png || exit 1; \
+	rm -rf $(FRAMES_DIR); \
+	echo "✅ Frame saved as $(OUT_DIR)/frame_$(T).png (frame $$F)"
+
+# Contact sheet: N frames spread evenly across the clip, 4 columns, each labelled
+# with its time. One image shows the whole animation. Output: out/<sketch>/sheet.png
+N ?= 8
+SHEET_COLS ?= 4
+SHEET_CELL_WIDTH ?= 480
+SHEET_FONT ?= /System/Library/Fonts/Menlo.ttc
+sheet: build
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video RENDER_START=0 RENDER_END= ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
+	SEL=""; k=0; while [ $$k -lt $(N) ]; do SEL="$$SEL+eq(n,$$(( k * TOTAL / $(N) )))"; k=$$(( k + 1 )); done; \
+	ROWS=$$(( ($(N) + $(SHEET_COLS) - 1) / $(SHEET_COLS) )); \
+	LABEL=""; \
+	if [ -f "$(SHEET_FONT)" ]; then \
+		LABEL="drawtext=fontfile=$(SHEET_FONT):text='%{pts\\:hms}':x=12:y=12:fontsize=$$(( $(VIDEO_WIDTH) / 20 )):fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=6,"; \
+	fi; \
+	$(FFMPEG) -y -v error -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga \
+		-vf "select='0$$SEL',$${LABEL}scale=$(SHEET_CELL_WIDTH):-2,tile=$(SHEET_COLS)x$$ROWS:padding=4:color=gray" \
+		-frames:v 1 -update 1 $(OUT_DIR)/sheet.png || exit 1; \
+	rm -rf $(FRAMES_DIR); \
+	echo "✅ Sheet saved as $(OUT_DIR)/sheet.png ($(N) frames across $(VIDEO_DURATION)s)"
+
+# Fast low-res preview: 480px wide, 15fps, same aspect and SAME DURATION as the
+# real render. Duration is kept because ctx.progress is relative to it; shortening
+# it would squeeze the whole animation into fewer seconds.
+DRAFT_WIDTH ?= 480
+DRAFT_FPS ?= 15
+DRAFT_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(DRAFT_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
+draft:
+	@$(MAKE) video VIDEO_WIDTH=$(DRAFT_WIDTH) VIDEO_HEIGHT=$(DRAFT_HEIGHT) VIDEO_FPS=$(DRAFT_FPS) VIDEO_FILENAME=draft.mp4
+
+# Smoke test: render tiny, sample first/middle/last frames, fail if ALL are one flat
+# colour (empty draw(), crash before drawing, everything off-screen). A single flat
+# frame only warns, since fade-ins from black are legitimate.
+SMOKE_WIDTH ?= 320
+SMOKE_FPS ?= 10
+SMOKE_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(SMOKE_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
+smoke: build
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video VIDEO_WIDTH=$(SMOKE_WIDTH) VIDEO_HEIGHT=$(SMOKE_HEIGHT) VIDEO_FPS=$(SMOKE_FPS) RENDER_START=0 RENDER_END= \
+		./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || { echo "smoke: app failed to run"; exit 1; }; \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(SMOKE_FPS) )); \
+	flat=0; checked=0; \
+	for F in 0 $$(( TOTAL / 2 )) $$(( TOTAL - 1 )); do \
+		FILE=$(FRAMES_DIR)/frame_$$(printf %06d $$F).tga; \
+		[ -f "$$FILE" ] || { echo "smoke: frame $$F was not written"; rm -rf $(FRAMES_DIR); exit 1; }; \
+		STATS=$$($(FFMPEG) -v error -i $$FILE -vf "signalstats,metadata=print:file=-" -f null - 2>&1); \
+		RANGE=0; \
+		for C in Y U V; do \
+			LO=$$(echo "$$STATS" | sed -n "s/.*signalstats.$${C}MIN=//p"); HI=$$(echo "$$STATS" | sed -n "s/.*signalstats.$${C}MAX=//p"); \
+			[ "$$LO" != "$$HI" ] && RANGE=1; \
+		done; \
+		checked=$$(( checked + 1 )); \
+		if [ $$RANGE -eq 0 ]; then flat=$$(( flat + 1 )); echo "smoke: warning: frame $$F is a single flat colour"; fi; \
+	done; \
+	rm -rf $(FRAMES_DIR); \
+	if [ $$flat -eq $$checked ]; then echo "smoke: FAIL: all sampled frames are blank"; exit 1; fi; \
+	echo "✅ smoke OK ($$(( checked - flat ))/$$checked sampled frames have content)"
+
 # Build and run for video recording
-video: Release
+video: build
 	@echo "🎬 Starting video recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(VIDEO_FILENAME)"
 	@echo ""
-	@mkdir -p bin/data/frames
+	@mkdir -p $(FRAMES_DIR)
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating MP4 with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(VIDEO_FILENAME)
-	@echo "✅ Video saved as $(VIDEO_FILENAME)"
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
+	@echo "✅ Video saved as $(OUT_DIR)/$(VIDEO_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Build and run for GIF recording
-gif: Release
+gif: build
 	@echo "🎨 Starting GIF recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(GIF_FILENAME)"
 	@echo ""
-	@mkdir -p bin/data/frames
+	@mkdir -p $(FRAMES_DIR)
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating GIF with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) /tmp/palette.png
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i bin/data/frames/frame_%06d.tga -i /tmp/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(GIF_FILENAME)
-	@rm -f /tmp/palette.png
-	@echo "✅ GIF saved as $(GIF_FILENAME)"
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
+	@rm -f $(OUT_DIR)/palette.png
+	@echo "✅ GIF saved as $(OUT_DIR)/$(GIF_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Alias for artists who prefer 'make art'
@@ -204,71 +346,37 @@ record:
 	@echo "🎥 Recording with settings: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT) @ $(VIDEO_FPS)fps for $(VIDEO_DURATION)s"
 	@$(MAKE) video
 
-# Run the interactive app
+# Run the interactive app.
+# OF already defines `run`; defining it again triggers "overriding commands"
+# warnings, so instead we supply the command OF's `run` executes, and only add
+# the Release prerequisite here (no recipe).
 run: Release
-	@echo "🚀 Starting interactive app..."
-	@export OUTPUT_TYPE=app VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 
-# Quick video with different settings
-hd: 
-	@$(MAKE) video VIDEO_WIDTH=1920 VIDEO_HEIGHT=1080 VIDEO_FPS=30
+# Format aliases: `make instagram-story` == `make video FORMAT=instagram-story`
+.PHONY: $(VIDEO_FORMATS) $(GIF_FORMATS) instagram
+$(VIDEO_FORMATS):
+	@$(MAKE) video FORMAT=$@
 
-4k:
-	@$(MAKE) video VIDEO_WIDTH=3840 VIDEO_HEIGHT=2160 VIDEO_FPS=30
-
-portrait:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30
-
-square:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30
-
-# Instagram optimized presets  
-instagram-feed:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30 VIDEO_FILENAME=instagram_feed.mp4
-
-instagram-story:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_story.mp4
-
-instagram-reel:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_reel.mp4
-
-instagram-portrait:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1350 VIDEO_FPS=30 VIDEO_FILENAME=instagram_portrait.mp4
+$(GIF_FORMATS):
+	@$(MAKE) gif FORMAT=$@
 
 # Alias for most common Instagram format
 instagram: instagram-feed
 
-# Quick GIF presets (optimized for web sharing)
-gif-small:
-	@$(MAKE) gif VIDEO_WIDTH=400 VIDEO_HEIGHT=400 VIDEO_FPS=15 GIF_FILENAME=small.gif
-
-gif-web:
-	@$(MAKE) gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 VIDEO_FPS=20 GIF_FILENAME=web.gif
-
-gif-square:
-	@$(MAKE) gif VIDEO_WIDTH=500 VIDEO_HEIGHT=500 VIDEO_FPS=24 GIF_FILENAME=square.gif
-
-# Instagram GIF presets
-gif-instagram-feed:
-	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=24 GIF_FILENAME=instagram_feed.gif
-
-gif-instagram-story:
-	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=24 GIF_FILENAME=instagram_story.gif
-
 # Clean frame files
 clean-frames:
 	@echo "🧹 Cleaning frame files..."
-	@rm -rf bin/data/frames/
+	@rm -rf $(FRAMES_DIR)
 
 # Clean video files
 clean-video:
 	@echo "🧹 Cleaning video files..."
-	@rm -f *.mp4
+	@rm -f out/*/*.mp4
 
 # Clean GIF files
 clean-gif:
 	@echo "🧹 Cleaning GIF files..."
-	@rm -f *.gif
+	@rm -f out/*/*.gif
 
 # Clean everything including frames, videos, and GIFs
 clean-all: clean clean-frames clean-video clean-gif

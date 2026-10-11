@@ -43,3 +43,8 @@ Temporary Items
 
 # Logs
 *.log
+# Render outputs
+out/
+*.mp4
+*.gif
+!small.gif
