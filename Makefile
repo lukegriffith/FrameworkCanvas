@@ -93,7 +93,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft
 
 # Default help target
 help:
@@ -233,6 +233,15 @@ sheet: build
 		-frames:v 1 -update 1 $(OUT_DIR)/sheet.png || exit 1; \
 	rm -rf $(FRAMES_DIR); \
 	echo "✅ Sheet saved as $(OUT_DIR)/sheet.png ($(N) frames across $(VIDEO_DURATION)s)"
+
+# Fast low-res preview: 480px wide, 15fps, same aspect and SAME DURATION as the
+# real render. Duration is kept because ctx.progress is relative to it; shortening
+# it would squeeze the whole animation into fewer seconds.
+DRAFT_WIDTH ?= 480
+DRAFT_FPS ?= 15
+DRAFT_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(DRAFT_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
+draft:
+	@$(MAKE) video VIDEO_WIDTH=$(DRAFT_WIDTH) VIDEO_HEIGHT=$(DRAFT_HEIGHT) VIDEO_FPS=$(DRAFT_FPS) VIDEO_FILENAME=draft.mp4
 
 # Build and run for video recording
 video: build
