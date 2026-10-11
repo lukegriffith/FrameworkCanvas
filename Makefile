@@ -93,7 +93,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame
 
 # Default help target
 help:
@@ -186,19 +186,34 @@ setup:
 	exit 1; \
 	'
 
-# Compile only, with output filtered to what matters. Prints OK on success.
-# Intended for fast edit/compile loops: full OF build output is thousands of lines.
-check:
+# Quiet build: prints nothing on success, filtered compiler errors on failure.
+# All media targets depend on this instead of Release so their output stays short
+# (OF's Release target prints hundreds of lines on every run, even when up to date).
+build:
 	@out=$$($(MAKE) Release 2>&1); rc=$$?; \
-	if [ $$rc -eq 0 ]; then \
-		echo "OK"; \
-	else \
+	if [ $$rc -ne 0 ]; then \
 		echo "$$out" | grep -E -A3 "error:|Undefined symbols|ld: |\*\*\*" | head -40; \
 		exit 1; \
 	fi
 
+# Compile only. Prints OK on success. For fast edit/compile loops.
+check: build
+	@echo "OK"
+
+# Render a single still at time T (seconds) to out/<sketch>/frame_<T>.png
+T ?= 0
+frame: build
+	@F=$$(awk 'BEGIN{printf "%d", $(T)*$(VIDEO_FPS)+0.5}'); \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
+	if [ $$F -ge $$TOTAL ]; then echo "T=$(T) is past the end ($(VIDEO_DURATION)s)"; exit 1; fi; \
+	rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video RENDER_START=$$F RENDER_END=$$F ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
+	$(FFMPEG) -y -v error -i $(FRAMES_DIR)/frame_$$(printf %06d $$F).tga -frames:v 1 $(OUT_DIR)/frame_$(T).png || exit 1; \
+	rm -rf $(FRAMES_DIR); \
+	echo "✅ Frame saved as $(OUT_DIR)/frame_$(T).png (frame $$F)"
+
 # Build and run for video recording
-video: Release
+video: build
 	@echo "🎬 Starting video recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
@@ -214,7 +229,7 @@ video: Release
 	@$(MAKE) clean-frames
 
 # Build and run for GIF recording
-gif: Release
+gif: build
 	@echo "🎨 Starting GIF recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
