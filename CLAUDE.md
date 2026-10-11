@@ -88,6 +88,22 @@ with identical semantics, so the animation looks the same in both.
 7. **Do not change `ctx.duration`-relative timing to make drafts faster.** `make draft`
    already keeps the full duration and lowers resolution and frame rate instead.
 
+## Tunable parameters without recompiling
+
+Put knobs in `sketches/<name>/params.json`. The Makefile finds it automatically (or pass
+`PARAMS_FILE=path`) and the sketch reads it through `ctx.params`, so changing a value
+only re-renders; it does not rebuild. This makes colour, speed and count tweaks cheap.
+
+```json
+{ "turns": 1, "pulses": 3, "hue": 0 }
+```
+```cpp
+int pulses = ctx.params.value("pulses", 3);   // always pass a default: the file is optional
+```
+
+Keep anything that multiplies `ctx.progress * TWO_PI` an integer, or the loop will jump.
+`sketches/demo` uses this.
+
 ## Reference material
 
 - `docs/OF_CHEATSHEET.md` : openFrameworks 0.12.1 API gotchas, compile-checked snippets,
