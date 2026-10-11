@@ -41,10 +41,10 @@ ifndef VIDEO_DURATION
 endif
 # Default output names follow the sketch; files land in out/<sketch>/
 ifndef VIDEO_FILENAME
-	VIDEO_FILENAME = $(SKETCH)$(if $(FORMAT),_$(FORMAT)).mp4
+	VIDEO_FILENAME = $(SKETCH_NAME)$(if $(FORMAT),_$(FORMAT)).mp4
 endif
 ifndef GIF_FILENAME
-	GIF_FILENAME = $(SKETCH)$(if $(FORMAT),_$(FORMAT)).gif
+	GIF_FILENAME = $(SKETCH_NAME)$(if $(FORMAT),_$(FORMAT)).gif
 endif
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
@@ -89,6 +89,8 @@ ifeq ($(wildcard sketches/$(SKETCH)/sketch.cpp),)
 $(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
 endif
 export SKETCH
+# Sketches may be nested (e.g. _examples/particles); filenames use the last component
+SKETCH_NAME = $(notdir $(SKETCH))
 
 # Optional partial render: RENDER_START/RENDER_END are inclusive frame indices
 RENDER_START ?= 0
