@@ -97,6 +97,27 @@ RENDER_START ?= 0
 export RENDER_START
 override PROJECT_EXTERNAL_SOURCE_PATHS := $(abspath sketches/$(SKETCH))
 
+# Optional per-sketch parameters, handed to the sketch as ctx.params without recompiling.
+# Picks up sketches/<name>/params.json automatically; PARAMS_FILE=path overrides it.
+# The path is made absolute because OF resolves relative paths against bin/data (see CLAUDE.md).
+ifndef PARAMS_FILE
+  ifneq ($(wildcard sketches/$(SKETCH)/params.json),)
+    PARAMS_FILE := sketches/$(SKETCH)/params.json
+  endif
+endif
+ifdef PARAMS_FILE
+  override PARAMS_FILE := $(abspath $(PARAMS_FILE))
+  export PARAMS_FILE
+endif
+
+# Sketch objects land directly in obj/<platform>/<config>/ (not under src/), and their
+# .d files name the sketch source they came from. If that sketch is renamed or deleted,
+# the stale .d makes every later build fail with "No rule to make target .../sketch.cpp".
+# Clear them whenever the selected sketch changes. Cheap: only the sketch recompiles.
+ifneq ($(shell cat obj/.sketch 2>/dev/null),$(SKETCH))
+  SKETCH_OBJ_RESET := $(shell find obj -mindepth 3 -maxdepth 3 \( -name '*.o' -o -name '*.d' \) -delete 2>/dev/null; mkdir -p obj; printf '%s' '$(SKETCH)' > obj/.sketch)
+endif
+
 # Per-sketch output: out/<sketch>/ holds frames and finished media
 OUT_DIR := out/$(SKETCH)
 override FRAMES_DIR := $(abspath $(OUT_DIR)/frames)

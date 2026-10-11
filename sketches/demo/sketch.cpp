@@ -1,7 +1,10 @@
 #include "Sketch.h"
 
-// Demo: rotating circles. One full rotation per clip, 3 pulses per clip,
-// so the loop is seamless. Everything is driven by ctx.progress (0..1).
+// Demo: rotating circles. By default one full rotation and 3 pulses per clip, so the
+// loop is seamless. Everything is driven by ctx.progress (0..1).
+//
+// Tunable without recompiling: edit sketches/demo/params.json (read via ctx.params).
+// Keep "turns" and "pulses" whole numbers or the loop will have a visible jump.
 class DemoSketch : public Sketch {
 public:
 	void draw(const Ctx& ctx) override {
@@ -10,10 +13,10 @@ public:
 		ofPushMatrix();
 		ofTranslate(ctx.w / 2.0f, ctx.h / 2.0f);
 		ofScale(scale);
-		ofRotateRad(ctx.progress * TWO_PI);
+		ofRotateRad(ctx.progress * TWO_PI * ctx.params.value("turns", 1));
 
-		ofSetColor(255, 100, 100);
-		ofDrawCircle(0, 0, 100 + 50 * std::sin(ctx.progress * TWO_PI * 3));
+		ofSetColor(ofColor::fromHsb(ctx.params.value("hue", 0), 155, 255));   // hue 0 = the original coral
+		ofDrawCircle(0, 0, 100 + 50 * std::sin(ctx.progress * TWO_PI * ctx.params.value("pulses", 3)));
 
 		ofSetColor(100, 255, 100);
 		ofDrawCircle(150, 0, 30);
