@@ -93,7 +93,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet
 
 # Default help target
 help:
@@ -211,6 +211,28 @@ frame: build
 	$(FFMPEG) -y -v error -i $(FRAMES_DIR)/frame_$$(printf %06d $$F).tga -frames:v 1 $(OUT_DIR)/frame_$(T).png || exit 1; \
 	rm -rf $(FRAMES_DIR); \
 	echo "✅ Frame saved as $(OUT_DIR)/frame_$(T).png (frame $$F)"
+
+# Contact sheet: N frames spread evenly across the clip, 4 columns, each labelled
+# with its time. One image shows the whole animation. Output: out/<sketch>/sheet.png
+N ?= 8
+SHEET_COLS ?= 4
+SHEET_CELL_WIDTH ?= 480
+SHEET_FONT ?= /System/Library/Fonts/Menlo.ttc
+sheet: build
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
+	OUTPUT_TYPE=video RENDER_START=0 RENDER_END= ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
+	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
+	SEL=""; k=0; while [ $$k -lt $(N) ]; do SEL="$$SEL+eq(n,$$(( k * TOTAL / $(N) )))"; k=$$(( k + 1 )); done; \
+	ROWS=$$(( ($(N) + $(SHEET_COLS) - 1) / $(SHEET_COLS) )); \
+	LABEL=""; \
+	if [ -f "$(SHEET_FONT)" ]; then \
+		LABEL="drawtext=fontfile=$(SHEET_FONT):text='%{pts\\:hms}':x=12:y=12:fontsize=$$(( $(VIDEO_HEIGHT) / 14 )):fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=6,"; \
+	fi; \
+	$(FFMPEG) -y -v error -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga \
+		-vf "select='0$$SEL',$${LABEL}scale=$(SHEET_CELL_WIDTH):-2,tile=$(SHEET_COLS)x$$ROWS:padding=4:color=gray" \
+		-frames:v 1 -update 1 $(OUT_DIR)/sheet.png || exit 1; \
+	rm -rf $(FRAMES_DIR); \
+	echo "✅ Sheet saved as $(OUT_DIR)/sheet.png ($(N) frames across $(VIDEO_DURATION)s)"
 
 # Build and run for video recording
 video: build
