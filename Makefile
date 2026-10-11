@@ -238,7 +238,7 @@ sheet: build
 	ROWS=$$(( ($(N) + $(SHEET_COLS) - 1) / $(SHEET_COLS) )); \
 	LABEL=""; \
 	if [ -f "$(SHEET_FONT)" ]; then \
-		LABEL="drawtext=fontfile=$(SHEET_FONT):text='%{pts\\:hms}':x=12:y=12:fontsize=$$(( $(VIDEO_HEIGHT) / 14 )):fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=6,"; \
+		LABEL="drawtext=fontfile=$(SHEET_FONT):text='%{pts\\:hms}':x=12:y=12:fontsize=$$(( $(VIDEO_WIDTH) / 20 )):fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=6,"; \
 	fi; \
 	$(FFMPEG) -y -v error -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga \
 		-vf "select='0$$SEL',$${LABEL}scale=$(SHEET_CELL_WIDTH):-2,tile=$(SHEET_COLS)x$$ROWS:padding=4:color=gray" \
