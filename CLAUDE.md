@@ -1,141 +1,153 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) working in this repository.
 
-## Project Overview
+## What this is
 
-FrameworkCanvas is an openFrameworks digital art template that provides dual-mode operation: interactive app development and automated video/GIF generation. It's designed as a starting template for digital art projects with a streamlined make-based workflow.
+FrameworkCanvas turns openFrameworks (C++) into a generator for social-media video
+and GIF art. You write ONE file, `sketches/<name>/sketch.cpp`. The harness handles
+windows, timing, frame capture and ffmpeg. Never edit `src/harness/` or `src/Sketch.h`
+to make a sketch work; if the harness seems wrong, say so instead.
 
-## Core Architecture
+## The loop (do this for every new asset)
 
-### Application Structure
-- `src/ofApp.h` - Main application header with video recording functionality
-- `src/ofApp.cpp` - Core application logic with dual-mode support (interactive/video)
-- `src/main.cpp` - Entry point with basic window setup
-- `Makefile` - Self-contained build system with media generation workflow
-- `config.make` - Project configuration with openFrameworks path and video settings
-
-### Key Components
-- **Dual Mode System**: Uses `OUTPUT_TYPE` environment variable to switch between "app" (interactive) and "video" (recording) modes
-- **Video Recording**: Frame-by-frame TGA export with FFmpeg conversion to MP4/GIF
-- **Environment-based Configuration**: Video settings passed through environment variables from Makefile to C++ application
-
-## Development Commands
-
-### Build and Run
 ```bash
-make              # Build interactive .app
-make run          # Build and run interactive app
-make Release      # Build release version (used internally)
+cp -r sketches/_template sketches/<name>      # 1. scaffold (or copy an example)
+# edit sketches/<name>/sketch.cpp
+make check  SKETCH=<name>                     # 2. compile. Prints OK or filtered errors
+make smoke  SKETCH=<name>                     # 3. fails if the output is blank
+make sheet  SKETCH=<name>                     # 4. LOOK at out/<name>/sheet.png
+make frame  SKETCH=<name> T=2.5               #    optional: one full-size still
+make draft  SKETCH=<name>                     # 5. quick low-res MP4 check
+make video  SKETCH=<name> FORMAT=instagram-story   # 6. final render
 ```
 
-### Media Generation
-```bash
-make video        # Create MP4 video with current settings
-make gif          # Create animated GIF with current settings  
-make art          # Alias for 'make video'
+Step 4 is the important one. You cannot watch a video, but you can read an image:
+open `out/<name>/sheet.png` with your image-reading tool. It is 8 labelled frames
+spread over the whole clip. Judge composition, colour, motion between cells, loop
+seam (first and last cell should look like neighbours), and anything blank or
+off-screen. Iterate on `check` and `sheet` until it looks right, then render.
+
+Where things land (all under `out/<name>/`, git-ignored):
+
+| Command | Output |
+|---|---|
+| `make frame T=<sec>` | `frame_<sec>.png` |
+| `make sheet [N=8]` | `sheet.png` |
+| `make draft` | `draft.mp4` (480px wide, 15 fps, full duration) |
+| `make video` | `<name>.mp4`, or `<name>_<format>.mp4` with `FORMAT=` |
+| `make gif` | `<name>.gif`, or `<name>_<format>.gif` |
+
+`SKETCH` defaults to `demo`. Nested names work: `SKETCH=_examples/particles`.
+`make help` lists everything. The `overriding commands for target 'help'` warnings
+printed by make are harmless noise from openFrameworks.
+
+## The sketch contract (`src/Sketch.h`)
+
+```cpp
+struct Ctx {
+    int   w, h;        // render size in pixels
+    float t;           // seconds since start. Deterministic when recording (frame / fps)
+    float progress;    // t / duration, wrapped to [0,1). Use for seamless loops
+    int   frame;       // 0-based frame index
+    float fps, duration;
+    uint32_t seed;     // ofSeedRandom(seed) is already called before setup()
+    bool  recording;
+    ofJson params;     // sketches/<name>/params.json if present, else {}
+};
+class Sketch {
+public:
+    virtual void setup(const Ctx&) {}
+    virtual void draw(const Ctx&) = 0;        // required
+    virtual void keyPressed(int key, const Ctx&) {}
+    virtual void mousePressed(int x, int y, int button, const Ctx&) {}
+};
+std::unique_ptr<Sketch> makeSketch();         // your file defines this
 ```
 
-### Presets
-```bash
-# Video formats
-make hd           # 1920x1080 @ 30fps
-make 4k           # 3840x2160 @ 30fps
-make square       # 1080x1080 @ 30fps
-make portrait     # 1080x1920 @ 30fps
+Guarantees: `draw` runs with a black, cleared, anti-aliased canvas of `ctx.w` x `ctx.h`,
+origin top-left, current colour white. Interactive mode and video mode call `draw`
+with identical semantics, so the animation looks the same in both.
 
-# Instagram optimized
-make instagram           # 1080x1080 feed post (most common)
-make instagram-story     # 1080x1920 story/reel format
-make instagram-reel      # 1080x1920 reel format
-make instagram-portrait  # 1080x1350 portrait post
+## Rules for good sketches
 
-# GIF presets (web optimized)
-make gif-small           # 400x400 @ 15fps
-make gif-web             # 800x600 @ 20fps
-make gif-square          # 500x500 @ 24fps
-make gif-instagram-feed  # 1080x1080 @ 24fps
-make gif-instagram-story # 1080x1920 @ 24fps
-```
+1. **Animate from `ctx.t` / `ctx.progress`.** Never `ofGetFrameNum()`, `ofGetElapsedTimef()`
+   or the clock: they differ between app mode (60 fps window) and video mode (30 fps).
+2. **Loop seamlessly.** `progress` wraps, so `sin(ctx.progress * TWO_PI * k)` with integer
+   `k` returns to its start. Non-integer `k` does not loop. For noise, walk a circle
+   in extra dimensions (see `_examples/noise-field`).
+3. **Size from `ctx.w`/`ctx.h`.** The same sketch must work for 1080x1080, 1080x1920,
+   1920x1080 and 4k. Use `float unit = std::min(ctx.w, ctx.h)`.
+4. **Prefer stateless motion**: position as a closed-form function of `progress`
+   (see `_examples/particles`). Anything that accumulates between frames (simulation,
+   feedback FBOs) cannot be sampled with `make frame` because earlier frames are
+   skipped. Check those with `make sheet` / `make draft` instead.
+5. **Randomness is reproducible.** `ofRandom`/`ofNoise` are seeded from `SEED` (default 1).
+   Generate random data in `setup()`, not `draw()`, so it does not flicker.
+6. **Load assets in `setup()`**, never in `draw()`.
+7. **Do not change `ctx.duration`-relative timing to make drafts faster.** `make draft`
+   already keeps the full duration and lowers resolution and frame rate instead.
 
-### Cleanup
-```bash
-make clean-frames    # Remove temporary frame files
-make clean-video     # Remove generated MP4s
-make clean-gif       # Remove generated GIF files
-make clean-all       # Clean everything (build + frames + videos + gifs)
-```
+## Reference material
 
-### Custom Settings
-Override any video setting on the fly:
-```bash
-make video VIDEO_WIDTH=2560 VIDEO_HEIGHT=1440 VIDEO_FPS=60 VIDEO_DURATION=15
-make gif VIDEO_WIDTH=600 VIDEO_HEIGHT=400 VIDEO_FPS=12 GIF_FILENAME=custom.gif
-```
+- `docs/OF_CHEATSHEET.md` : openFrameworks 0.12.1 API gotchas, compile-checked snippets,
+  common errors. Read before writing non-trivial drawing code.
+- `sketches/_template/` : minimal commented skeleton.
+- `sketches/_examples/particles` : stateless seeded particles with trails, perfect loop.
+- `sketches/_examples/noise-field` : looping noise flow lines, any aspect ratio.
+- `sketches/_examples/shader` : fullscreen GLSL (`#version 120`) with embedded source.
+- `sketches/_examples/type` : animated text using the system font.
 
-## Configuration
+## Options (any target)
 
-### Video Settings
-Configure defaults in `config.make`:
-- `OUTPUT_TYPE` - "app" or "video" 
-- `VIDEO_WIDTH`, `VIDEO_HEIGHT` - Output resolution
-- `VIDEO_FPS` - Frame rate
-- `VIDEO_DURATION` - Recording length in seconds
-- `VIDEO_FILENAME`, `GIF_FILENAME` - Output filenames
-- `FFMPEG` - FFmpeg executable path
+| Variable | Meaning |
+|---|---|
+| `SKETCH=name` | which sketch directory under `sketches/` |
+| `FORMAT=name` | sets size and fps: hd, 4k, square, portrait, instagram-feed, instagram-story, instagram-reel, instagram-portrait, gif-small, gif-web, gif-square, gif-instagram-feed, gif-instagram-story. Each is also a target: `make instagram-story` |
+| `VIDEO_WIDTH` `VIDEO_HEIGHT` `VIDEO_FPS` `VIDEO_DURATION` | override anything; explicit values beat `FORMAT` |
+| `SEED=n` | random seed |
+| `RENDER_START` `RENDER_END` | inclusive frame range (partial render) |
+| `T=sec`, `N=count` | for `frame` and `sheet` |
 
-### openFrameworks Setup
-- `OF_ROOT` in `config.make` must point to openFrameworks installation
-- Currently set to: `/Users/lukegriffith/Downloads/of_v0.12.1_osx_release`
+Defaults live in `config.make` (1920x1080, 30 fps, 10 s). `OF_ROOT` there must point at
+an openFrameworks 0.12.1 install (`make setup` helps find it).
 
-## Architecture Notes
+## Architecture (for harness changes only)
 
-### Video Recording Flow
-1. Makefile sets environment variables and builds app in Release mode
-2. App reads environment variables in `ofApp::loadVideoSettings()`
-3. In video mode: app runs headless, saves frames to `bin/data/frames/`
-4. FFmpeg converts frames to final MP4/GIF format
-5. Temporary frames are automatically cleaned up
+- `src/Sketch.h` : the contract above.
+- `src/harness/main.cpp` : window creation (GL 2.1 context).
+- `src/harness/ofApp.*` : owns the sketch, builds `Ctx` each frame, renders into a 4x MSAA
+  FBO at output size, saves each frame, exits after the last.
+- `src/harness/Settings.*` : reads env vars (`OUTPUT_TYPE`, `VIDEO_*`, `RENDER_*`, `SEED`,
+  `PARAMS_FILE`, `FRAMES_DIR`) set by the Makefile.
+- `Makefile` : `SKETCH` selection (compiles only `sketches/<name>/` via
+  `PROJECT_EXTERNAL_SOURCE_PATHS`), the quiet `build` target, all media targets, the
+  `FORMAT` table. Media targets depend on `build`, which prints nothing unless compilation fails.
+- Record mode runs uncapped (no vsync, no frame-rate limit); time comes from the frame
+  index, so rendering speed never changes the result.
 
-### Frame Capture Format
+### Frame capture format
 Frames are saved as uncompressed TGA, not PNG. PNG's zlib compression is the
 dominant per-frame cost during recording (~9x slower at 1080p) and these are
-throwaway intermediates the Makefile deletes right after ffmpeg assembles the
-final video, so there's no reason to pay for compression.
+throwaway intermediates that the Makefile deletes right after ffmpeg assembles the
+final media, so there is no reason to pay for compression.
 
-### Interactive Mode Features
-- Real-time preview with 60fps
-- Press 'r' to start manual recording
-- FPS counter and frame information display
-- Full mouse/keyboard event handling available
-
-### Handling User-Supplied File Paths
+### Handling user-supplied file paths
 `ofFile`/`ofToDataPath` resolve relative paths against `bin/data/`, not the
 process CWD. Any path that comes from an env var or Makefile-forwarded CLI
 arg (e.g. a script/config/asset path) will silently fail to open if passed
 straight to `ofFile()`. Use `std::ifstream` directly, or resolve to an
 absolute path before handing it to OF's file API. On the Makefile side,
-apply `override VAR := $(abspath $(VAR))` for any such path variable —
+apply `override VAR := $(abspath $(VAR))` for any such path variable;
 plain `:=` won't override a value passed on the `make` command line.
+(Inside a sketch, assets loaded with OF calls such as `ofImage::load` ARE relative
+to `bin/data/`; that is intended.)
 
 ## Dependencies
 
-- **openFrameworks 0.12.1+** - Core framework
-- **Xcode Command Line Tools** - For compilation
-- **FFmpeg** - For video/GIF generation (`brew install ffmpeg`)
-- **C++17 compatible compiler**
+- openFrameworks 0.12.1+, Xcode Command Line Tools, C++17 compiler
+- FFmpeg (`brew install ffmpeg`), with `drawtext` for sheet time labels (default brew build has it)
 
-## Template Usage
+## Commit message guidelines
 
-This project is designed to be forked and customized. Replace the demo animation in `ofApp::draw()` with your creative code. The video recording system will automatically capture your animations.
-
-## Commit Message Guidelines
-
-Use conventional commits format:
-- `feat:` for new features
-- `fix:` for bug fixes  
-- `docs:` for documentation changes
-- `refactor:` for code refactoring
-- `style:` for formatting changes
-- `test:` for adding tests
-- `chore:` for maintenance tasks
+Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `style:`, `test:`, `chore:`, `perf:`.
