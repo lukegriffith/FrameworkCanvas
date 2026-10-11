@@ -41,15 +41,35 @@ ifndef VIDEO_DURATION
 endif
 # Default output names follow the sketch; files land in out/<sketch>/
 ifndef VIDEO_FILENAME
-	VIDEO_FILENAME = $(SKETCH).mp4
+	VIDEO_FILENAME = $(SKETCH)$(if $(FORMAT),_$(FORMAT)).mp4
 endif
 ifndef GIF_FILENAME
-	GIF_FILENAME = $(SKETCH).gif
+	GIF_FILENAME = $(SKETCH)$(if $(FORMAT),_$(FORMAT)).gif
 endif
 
 # FFmpeg path (adjust if ffmpeg is not in PATH)
 ifndef FFMPEG
 	FFMPEG = ffmpeg
+endif
+
+# Named output formats: name:WIDTHxHEIGHTxFPS.
+# `make video FORMAT=instagram-story` (or the alias `make instagram-story`) sets
+# VIDEO_WIDTH/HEIGHT/FPS from this table. Explicit VIDEO_* on the command line still win.
+VIDEO_FORMATS := hd 4k square portrait instagram-feed instagram-story instagram-reel instagram-portrait
+GIF_FORMATS := gif-small gif-web gif-square gif-instagram-feed gif-instagram-story
+FORMATS := hd:1920x1080x30 4k:3840x2160x30 square:1080x1080x30 portrait:1080x1920x30 \
+           instagram-feed:1080x1080x30 instagram-story:1080x1920x30 instagram-reel:1080x1920x30 \
+           instagram-portrait:1080x1350x30 \
+           gif-small:400x400x15 gif-web:800x600x20 gif-square:500x500x24 \
+           gif-instagram-feed:1080x1080x24 gif-instagram-story:1080x1920x24
+ifdef FORMAT
+  FORMAT_SPEC := $(patsubst $(FORMAT):%,%,$(filter $(FORMAT):%,$(FORMATS)))
+  ifeq ($(FORMAT_SPEC),)
+    $(error unknown FORMAT '$(FORMAT)'. Known: $(subst :, ,$(foreach f,$(FORMATS),$(firstword $(subst :, ,$(f))))))
+  endif
+  VIDEO_WIDTH  := $(word 1,$(subst x, ,$(FORMAT_SPEC)))
+  VIDEO_HEIGHT := $(word 2,$(subst x, ,$(FORMAT_SPEC)))
+  VIDEO_FPS    := $(word 3,$(subst x, ,$(FORMAT_SPEC)))
 endif
 
 # Export variables so they're available to the compiled application
@@ -319,51 +339,16 @@ record:
 # the Release prerequisite here (no recipe).
 run: Release
 
-# Quick video with different settings
-hd: 
-	@$(MAKE) video VIDEO_WIDTH=1920 VIDEO_HEIGHT=1080 VIDEO_FPS=30
+# Format aliases: `make instagram-story` == `make video FORMAT=instagram-story`
+.PHONY: $(VIDEO_FORMATS) $(GIF_FORMATS) instagram
+$(VIDEO_FORMATS):
+	@$(MAKE) video FORMAT=$@
 
-4k:
-	@$(MAKE) video VIDEO_WIDTH=3840 VIDEO_HEIGHT=2160 VIDEO_FPS=30
-
-portrait:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30
-
-square:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30
-
-# Instagram optimized presets  
-instagram-feed:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=30 VIDEO_FILENAME=instagram_feed.mp4
-
-instagram-story:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_story.mp4
-
-instagram-reel:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=30 VIDEO_FILENAME=instagram_reel.mp4
-
-instagram-portrait:
-	@$(MAKE) video VIDEO_WIDTH=1080 VIDEO_HEIGHT=1350 VIDEO_FPS=30 VIDEO_FILENAME=instagram_portrait.mp4
+$(GIF_FORMATS):
+	@$(MAKE) gif FORMAT=$@
 
 # Alias for most common Instagram format
 instagram: instagram-feed
-
-# Quick GIF presets (optimized for web sharing)
-gif-small:
-	@$(MAKE) gif VIDEO_WIDTH=400 VIDEO_HEIGHT=400 VIDEO_FPS=15 GIF_FILENAME=small.gif
-
-gif-web:
-	@$(MAKE) gif VIDEO_WIDTH=800 VIDEO_HEIGHT=600 VIDEO_FPS=20 GIF_FILENAME=web.gif
-
-gif-square:
-	@$(MAKE) gif VIDEO_WIDTH=500 VIDEO_HEIGHT=500 VIDEO_FPS=24 GIF_FILENAME=square.gif
-
-# Instagram GIF presets
-gif-instagram-feed:
-	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1080 VIDEO_FPS=24 GIF_FILENAME=instagram_feed.gif
-
-gif-instagram-story:
-	@$(MAKE) gif VIDEO_WIDTH=1080 VIDEO_HEIGHT=1920 VIDEO_FPS=24 GIF_FILENAME=instagram_story.gif
 
 # Clean frame files
 clean-frames:
