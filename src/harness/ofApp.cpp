@@ -37,7 +37,7 @@ void ofApp::setup(){
 	// Offscreen buffer at the recording resolution, independent of window/screen size
 	// (grabScreen() gets clamped by macOS to the actual window bounds, corrupting
 	// tall/large frame captures).
-	fbo.allocate(settings.width, settings.height, GL_RGBA);
+	fbo.allocate(settings.width, settings.height, GL_RGBA, 4);   // 4x MSAA
 
 	startTime = ofGetElapsedTimef();
 	fillCtx(0);
