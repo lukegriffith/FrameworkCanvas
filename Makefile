@@ -69,6 +69,10 @@ ifeq ($(wildcard sketches/$(SKETCH)/sketch.cpp),)
 $(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
 endif
 export SKETCH
+
+# Optional partial render: RENDER_START/RENDER_END are inclusive frame indices
+RENDER_START ?= 0
+export RENDER_START
 override PROJECT_EXTERNAL_SOURCE_PATHS := $(abspath sketches/$(SKETCH))
 
 # Per-sketch output: out/<sketch>/ holds frames and finished media
@@ -192,7 +196,7 @@ video: Release
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating MP4 with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
 	@echo "✅ Video saved as $(OUT_DIR)/$(VIDEO_FILENAME)"
 	@$(MAKE) clean-frames
 
@@ -208,8 +212,8 @@ gif: Release
 	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 	@echo ""
 	@echo "🔧 Creating GIF with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
 	@rm -f $(OUT_DIR)/palette.png
 	@echo "✅ GIF saved as $(OUT_DIR)/$(GIF_FILENAME)"
 	@$(MAKE) clean-frames
