@@ -29,18 +29,27 @@ make setup
 # Interactive mode - opens a window for real-time creativity
 make run
 
-# Create a video - generates MP4 automatically
-make art
+# Look at your work before rendering
+make sheet     # contact sheet of the whole animation -> out/demo/sheet.png
+make frame T=2.5  # one full-size still
+
+# Create a video - generates MP4 automatically (output lands in out/<sketch>/)
+make video
 
 # Create an animated GIF - perfect for web sharing
 make gif
 
 # Quick presets
 make instagram # 1080x1080 Instagram feed post
-make gif-web   # 800x600 optimized GIF  
+make gif-web   # 800x600 optimized GIF
 make 4k        # 3840x2160 for high quality
 make square    # 1080x1080 for general social media
 ```
+
+Your art lives in `sketches/<name>/sketch.cpp`. Start from `sketches/_template`, or copy
+an example from `sketches/_examples/`. Select a sketch with `SKETCH=<name>`
+(default `demo`). See [CLAUDE.md](CLAUDE.md) for the full workflow, which is written to
+work equally well for people and for coding agents.
 
 ## 🎨 Usage
 
@@ -109,8 +118,10 @@ VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080  
 VIDEO_FPS = 30
 VIDEO_DURATION = 10
-VIDEO_FILENAME = output.mp4
-GIF_FILENAME = output.gif
+
+# Optional. Default is <sketch>.mp4 / <sketch>.gif, written to out/<sketch>/
+# VIDEO_FILENAME = my_video.mp4
+# GIF_FILENAME = my_anim.gif
 
 # FFmpeg path (if not in PATH)  
 FFMPEG = ffmpeg
@@ -127,20 +138,26 @@ FFMPEG = ffmpeg
 
 ```
 FrameworkCanvas/
+├── sketches/
+│   ├── demo/                # default sketch (+ params.json)
+│   ├── _template/           # copy this to start a new sketch
+│   └── _examples/           # particles, noise-field, shader, type
 ├── src/
-│   ├── ofApp.h          # Main application header
-│   ├── ofApp.cpp        # Application logic with video recording
-│   └── main.cpp         # Entry point
-├── config.make          # Project configuration
-├── Makefile            # Self-contained build system
-├── addons.make         # openFrameworks addons
-└── README.md           # This file
+│   ├── Sketch.h             # the sketch contract (Ctx + Sketch)
+│   └── harness/             # app, recorder, settings: not for sketch authors
+├── docs/
+│   ├── OF_CHEATSHEET.md     # openFrameworks 0.12.1 gotchas
+│   └── LLM_READINESS_PLAN.md
+├── out/                     # renders (git-ignored): out/<sketch>/...
+├── config.make              # project configuration
+├── Makefile                 # build + media workflow
+└── CLAUDE.md                # workflow guide for agents and people
 ```
 
 ## 🎥 How Media Generation Works
 
 ### Video (MP4)
-1. **Frame Generation**: App runs in headless mode, saving each frame as uncompressed TGA
+1. **Frame Generation**: App renders offscreen as fast as it can, saving each frame as uncompressed TGA
 2. **H.264 Encoding**: FFmpeg converts frames to high-quality MP4 with H.264 codec
 3. **Cleanup**: Temporary frames are automatically removed
 4. **Output**: Final video saved to project directory
@@ -180,18 +197,37 @@ The app reads these environment variables (set by Makefile):
 - `VIDEO_HEIGHT` - Frame height in pixels  
 - `VIDEO_FPS` - Frames per second
 - `VIDEO_DURATION` - Recording duration in seconds
+- `SEED`, `RENDER_START`, `RENDER_END`, `PARAMS_FILE`, `FRAMES_DIR` - set by the Makefile; see CLAUDE.md
 
-### Custom Animation
+### Writing a sketch
 
-Replace the demo animation in `ofApp::drawScene(int w, int h)` in `src/ofApp.cpp`.
-Frame capture is handled by the app; your drawing code never needs to save frames.
+```bash
+cp -r sketches/_template sketches/mything
+make check  SKETCH=mything      # compile only, prints OK or the errors
+make sheet  SKETCH=mything      # open out/mything/sheet.png
+make video  SKETCH=mything FORMAT=instagram-story
+```
+
+A sketch is one class with a `draw(const Ctx&)` method. Animate from `ctx.t` (seconds) or
+`ctx.progress` (0..1 over the clip, so `sin(ctx.progress * TWO_PI * k)` loops seamlessly),
+and size things from `ctx.w` / `ctx.h`. Frame capture and timing are handled for you.
 
 ```cpp
-void ofApp::drawScene(int w, int h){
-    ofSetColor(255, 100, 200);
-    ofDrawCircle(w/2, h/2, 50);
-}
+#include "Sketch.h"
+
+class MySketch : public Sketch {
+public:
+    void draw(const Ctx& ctx) override {
+        ofSetColor(255, 100, 200);
+        ofDrawCircle(ctx.w / 2.0f, ctx.h / 2.0f,
+                     std::min(ctx.w, ctx.h) * (0.2f + 0.05f * std::sin(ctx.progress * TWO_PI)));
+    }
+};
+std::unique_ptr<Sketch> makeSketch() { return std::make_unique<MySketch>(); }
 ```
+
+Other useful make targets: `make smoke` (fail on blank output), `make draft` (fast low-res
+MP4), `make help`. Per-sketch tunables go in `sketches/<name>/params.json`.
 
 ## 🤝 Contributing
 
