@@ -10,6 +10,7 @@ void ofApp::setup(){
 	cout << "seed=" << settings.seed << " renderStart=" << settings.renderStart << " renderEnd=" << settings.renderEnd << endl;
 
 	ofSeedRandom(settings.seed);
+	ofSetCircleResolution(64);   // OF default (22) shows visible facets at video resolutions
 
 	ctx.fps = settings.fps;
 	ctx.duration = settings.duration;
