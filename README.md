@@ -9,7 +9,7 @@ FrameworkCanvas combines the power of openFrameworks with a streamlined make-bas
 ## ✨ Features
 
 - **Dual-Mode Operation**: Switch between interactive app and video/GIF recording modes
-- **Zero-Config Media Generation**: Frame-by-frame PNG export with automatic MP4/GIF creation
+- **Zero-Config Media Generation**: Frame-by-frame TGA export with automatic MP4/GIF creation
 - **Multiple Output Formats**: Generate high-quality MP4 videos or web-friendly animated GIFs
 - **Artist-Friendly Workflow**: Simple `make art` commands with preset formats
 - **Neovim + Make Integration**: No Xcode required - pure terminal workflow
@@ -140,13 +140,13 @@ FrameworkCanvas/
 ## 🎥 How Media Generation Works
 
 ### Video (MP4)
-1. **Frame Generation**: App runs in headless mode, saving each frame as PNG
+1. **Frame Generation**: App runs in headless mode, saving each frame as uncompressed TGA
 2. **H.264 Encoding**: FFmpeg converts frames to high-quality MP4 with H.264 codec
 3. **Cleanup**: Temporary frames are automatically removed
 4. **Output**: Final video saved to project directory
 
 ### GIF Animation  
-1. **Frame Generation**: Same PNG frame sequence as video
+1. **Frame Generation**: Same TGA frame sequence as video
 2. **Palette Optimization**: FFmpeg generates optimal color palette for better quality
 3. **GIF Encoding**: Two-pass process creates smooth, web-optimized animated GIF
 4. **Cleanup**: Temporary frames and palette files removed automatically
@@ -183,19 +183,13 @@ The app reads these environment variables (set by Makefile):
 
 ### Custom Animation
 
-Replace the demo animation in `src/ofApp.cpp` `draw()` method:
+Replace the demo animation in `ofApp::drawScene(int w, int h)` in `src/ofApp.cpp`.
+Frame capture is handled by the app; your drawing code never needs to save frames.
 
 ```cpp
-void ofApp::draw(){
-    // Your creative code here
+void ofApp::drawScene(int w, int h){
     ofSetColor(255, 100, 200);
-    ofDrawCircle(mouseX, mouseY, 50);
-    
-    // Video recording happens automatically
-    if (isRecording) {
-        saveFrame();
-        frameCount++;
-    }
+    ofDrawCircle(w/2, h/2, 50);
 }
 ```
 
