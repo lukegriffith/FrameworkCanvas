@@ -80,6 +80,8 @@ OUT_DIR := out/$(SKETCH)
 override FRAMES_DIR := $(abspath $(OUT_DIR)/frames)
 export FRAMES_DIR
 
+override PLATFORM_RUN_COMMAND = echo "🚀 Starting interactive app..." && OUTPUT_TYPE=app ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+
 # call the project makefile!
 # (guarded so that `make setup` can still run and give useful guidance even
 #  when OF_ROOT isn't valid yet - see the setup target below)
@@ -91,7 +93,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check
 
 # Default help target
 help:
@@ -184,6 +186,17 @@ setup:
 	exit 1; \
 	'
 
+# Compile only, with output filtered to what matters. Prints OK on success.
+# Intended for fast edit/compile loops: full OF build output is thousands of lines.
+check:
+	@out=$$($(MAKE) Release 2>&1); rc=$$?; \
+	if [ $$rc -eq 0 ]; then \
+		echo "OK"; \
+	else \
+		echo "$$out" | grep -E -A3 "error:|Undefined symbols|ld: |\*\*\*" | head -40; \
+		exit 1; \
+	fi
+
 # Build and run for video recording
 video: Release
 	@echo "🎬 Starting video recording..."
@@ -226,10 +239,11 @@ record:
 	@echo "🎥 Recording with settings: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT) @ $(VIDEO_FPS)fps for $(VIDEO_DURATION)s"
 	@$(MAKE) video
 
-# Run the interactive app
+# Run the interactive app.
+# OF already defines `run`; defining it again triggers "overriding commands"
+# warnings, so instead we supply the command OF's `run` executes, and only add
+# the Release prerequisite here (no recipe).
 run: Release
-	@echo "🚀 Starting interactive app..."
-	@export OUTPUT_TYPE=app VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
 
 # Quick video with different settings
 hd: 
