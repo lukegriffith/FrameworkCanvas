@@ -58,6 +58,18 @@ export VIDEO_HEIGHT
 export VIDEO_FPS
 export VIDEO_DURATION
 
+################################################################################
+# SKETCH SELECTION
+# Each sketch lives in sketches/<name>/ and defines makeSketch() (see src/Sketch.h).
+# Only the chosen sketch directory is compiled and linked alongside src/.
+################################################################################
+SKETCH ?= demo
+ifeq ($(wildcard sketches/$(SKETCH)/sketch.cpp),)
+$(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
+endif
+export SKETCH
+override PROJECT_EXTERNAL_SOURCE_PATHS := $(abspath sketches/$(SKETCH))
+
 # call the project makefile!
 # (guarded so that `make setup` can still run and give useful guidance even
 #  when OF_ROOT isn't valid yet - see the setup target below)
