@@ -54,4 +54,67 @@ Wall time is taken from the agent run's own timing.
 
 ## Results
 
-(Filled in after the runs; see below.)
+Run on 2026-10-12. Each cell is one fresh agent (same model for all ten). Sketches are kept
+in `sketches/_bakeoff/<brief>-<lane>/`; render one with e.g.
+`make sheet SKETCH=_bakeoff/B3-web FORMAT=instagram-portrait VIDEO_DURATION=10`.
+
+| Brief | Lane | Raw first check | Real first check | Checks / sheets | Time (s) | Agent tokens | Quality | Seamless loop |
+|---|---|---|---|---|---|---|---|---|
+| B1 vortex | web | fail* | pass | 2 / 2 | 60 | 36.6k | 4 | yes (1.01) |
+| B1 vortex | C++ | fail* | pass | 4 / 3 | 95 | 44.8k | 4 | yes (1.00) |
+| B2 type | web | fail* | pass | 2 / 2 | 45 | 38.1k | 4 | yes (0.82) |
+| B2 type | C++ | pass | pass | 2 / 2 | 66 | 43.8k | 3 | yes (1.11) |
+| B3 ridgelines | web | fail* | pass | 5 / 5 | 104 | 48.5k | 5 | yes (1.11) |
+| B3 ridgelines | C++ | pass | pass | 1 / 1 | 58 | 35.2k | 3 | yes (1.04) |
+| B4 glow | web | pass | pass | 1 / 1 | 68 | 35.6k | 4 | yes (0.92) |
+| B4 glow | C++ | pass | pass | 1 / 1 | 53 | 36.9k | 3 | yes (0.98) |
+| B5 grid | web | fail* | pass | 2 / 2 | 37 | 33.1k | 5 | yes (1.10) |
+| B5 grid | C++ | pass | pass | 1 / 1 | 41 | 32.4k | 5 | yes (1.13) |
+
+\* Not a sketch failure. The agent put all its make options into one shell variable, zsh did not
+split it, and make reported a confusing "both sketch.cpp and sketch.js" error. Five of the
+first six agents hit this. It was fixed afterwards in the Makefile (`SKETCH` must now be a
+single word, with a clear message), and the later C++ prompts warned against it, which is why
+"raw first check" differs between the lanes. "Real first check" is the first check that actually
+ran the sketch, taken from the agent's own report.
+
+Seamless loop is measured, not claimed: the mean pixel difference between the last and first
+frame divided by the difference between two consecutive frames. A seamless loop gives about
+1.0, shown in brackets. All ten videos were also verified with ffprobe for the right size and
+frame count.
+
+### Summary
+
+| | Web (p5.js) | C++ (openFrameworks) |
+|---|---|---|
+| Finished with correct output | 5 / 5 | 5 / 5 |
+| Real first-try success | 5 / 5 | 5 / 5 |
+| Mean time | 63 s | 63 s |
+| Mean agent tokens | 38.4k | 38.6k |
+| Mean quality (1 to 5) | 4.4 | 3.6 |
+| Seamless loops | 5 / 5 | 5 / 5 |
+
+### Conclusion
+
+1. **Reliability and effort were indistinguishable.** Both lanes finished every brief, with
+   the same success rate, the same mean time and the same token cost. The tooling (check,
+   sheet, smoke) works equally well in both.
+2. **Quality favoured the web lane, 4.4 to 3.6.** The gap came from three briefs. The C++
+   ridgelines had spiky back layers and a half-hidden sun. The C++ type used a thin regular
+   font because the default system font offers no weight choice. The C++ glow field clumped
+   into one corner for a stretch. On the grid brief both scored 5. Web sketches also got
+   gradients, soft shadows and alpha layering with less effort.
+3. **Keep web as the default for 2D work** and C++ for custom shaders and heavy compute, as
+   `CLAUDE.md` already recommends. The data does not justify going further than that.
+
+### Caveats
+
+- One run per cell, one model, five briefs. Treat the quality gap as a signal, not a result.
+- The reviewer who scored quality also built the harness, and scored from contact sheets
+  only. Scores are subjective.
+- The web runs overlapped in time and the C++ runs did not, so timings are rough. Prompts
+  for the later C++ runs added a warning about shell quoting.
+- No brief required a custom GLSL shader, which is the C++ lane's stated strength, so that
+  claim is untested here.
+- Agents did not play the videos. They judged from contact sheets, as an agent would in
+  normal use.

@@ -24,6 +24,10 @@ The file name decides: `sketch.js` runs in the web lane, `sketch.cpp` in the C++
 | Web (`sketch.js`) | Default for 2D canvas work: shapes, particles, type, generative patterns, noise fields, anything p5 does. No compile step, fastest to iterate, p5 is what you know best. |
 | C++ (`sketch.cpp`) | Custom GLSL shaders (GL 2.1), heavy per-frame maths or very large particle counts, or work already written against openFrameworks. |
 
+Evidence: in a 10-run comparison (`docs/bakeoff.md`) both lanes were equally reliable and
+cost the same effort; web output scored higher on quality (4.4 vs 3.6 out of 5). It did not
+test shader-heavy work.
+
 First time using the web lane: `make setup-web` (installs Node packages and Chromium
 under `engines/web/`; needs Node 20+). Then `cp -r sketches/_template-web sketches/<name>`.
 

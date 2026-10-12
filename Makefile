@@ -85,6 +85,11 @@ export VIDEO_DURATION
 # Only the chosen sketch directory is compiled and linked alongside src/.
 ################################################################################
 SKETCH ?= demo
+# Guard against passing several options as one word (e.g. a shell variable holding
+# "SKETCH=x FORMAT=y" that some shells do not split), which otherwise gives a baffling error.
+ifneq ($(words $(SKETCH)),1)
+  $(error SKETCH must be a single name, got '$(SKETCH)'. Pass each option as its own argument: make check SKETCH=name FORMAT=square)
+endif
 # A sketch is either C++ (sketch.cpp, openFrameworks lane) or JavaScript (sketch.js, web/p5 lane).
 HAS_CPP := $(wildcard sketches/$(SKETCH)/sketch.cpp)
 HAS_JS  := $(wildcard sketches/$(SKETCH)/sketch.js)
