@@ -142,7 +142,14 @@ OUT_DIR := out/$(SKETCH)
 override FRAMES_DIR := $(abspath $(OUT_DIR)/frames)
 export FRAMES_DIR
 
+ifeq ($(ENGINE),web)
+override PLATFORM_RUN_COMMAND = [ -d engines/web/node_modules ] || { echo "web engine not installed: run make setup-web"; exit 1; }; \
+	node engines/web/render.mjs --live --sketch sketches/$(SKETCH)/sketch.js \
+		--w $(VIDEO_WIDTH) --h $(VIDEO_HEIGHT) --fps $(VIDEO_FPS) --duration $(VIDEO_DURATION) \
+		--seed $(or $(SEED),1) $(if $(PARAMS_FILE),--params $(PARAMS_FILE))
+else
 override PLATFORM_RUN_COMMAND = echo "🚀 Starting interactive app..." && OUTPUT_TYPE=app ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+endif
 
 # call the project makefile!
 # (guarded so that `make setup` can still run and give useful guidance even
@@ -173,7 +180,7 @@ help:
 	@echo "  make video            final MP4         -> out/<sketch>/<sketch>.mp4"
 	@echo "  make gif              final GIF         -> out/<sketch>/<sketch>.gif"
 	@echo ""
-	@echo "Interactive: make run   (press r to record)"
+	@echo "Interactive: make run   (C++: press r to record; web: live looping preview window)"
 	@echo ""
 	@echo "Options (any target):"
 	@echo "  SKETCH=name           which sketch (default: $(SKETCH)); sketch.js = web lane, sketch.cpp = C++ lane"
@@ -254,12 +261,14 @@ test-web:
 # Everything after this step (ffmpeg, sheets, smoke) is shared between engines.
 ifeq ($(ENGINE),web)
 BUILD_DEP :=
+RUN_DEP :=
 render_frames = { [ -d engines/web/node_modules ] || { echo "web engine not installed: run make setup-web"; exit 1; }; } && \
 	FC_QUIET=1 node engines/web/render.mjs --sketch sketches/$(SKETCH)/sketch.js --frames-dir $(FRAMES_DIR) \
 		--w $(1) --h $(2) --fps $(3) --duration $(VIDEO_DURATION) --start $(4) --end $(5) \
 		--seed $(or $(SEED),1) $(if $(PARAMS_FILE),--params $(PARAMS_FILE))
 else
 BUILD_DEP := build
+RUN_DEP := Release
 render_frames = OUTPUT_TYPE=video VIDEO_WIDTH=$(1) VIDEO_HEIGHT=$(2) VIDEO_FPS=$(3) RENDER_START=$(4) RENDER_END=$(5) \
 	./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null
 endif
@@ -405,8 +414,8 @@ record:
 # Run the interactive app.
 # OF already defines `run`; defining it again triggers "overriding commands"
 # warnings, so instead we supply the command OF's `run` executes, and only add
-# the Release prerequisite here (no recipe).
-run: Release
+# the prerequisite here (no recipe). Web sketches need no C++ build.
+run: $(RUN_DEP)
 
 # Format aliases: `make instagram-story` == `make video FORMAT=instagram-story`
 .PHONY: $(VIDEO_FORMATS) $(GIF_FORMATS) instagram

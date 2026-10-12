@@ -19,28 +19,29 @@ class SketchError extends Error {}
 
 function parseArgs(argv) {
 	const a = { w: 1920, h: 1080, fps: 30, duration: 10, start: 0, end: -1, seed: 1, timeout: 15000, frameTimeout: 60000 };
-	const ints = new Set(['w', 'h', 'fps', 'duration', 'start', 'end', 'seed', 'timeout', 'frame-timeout']);
+	const ints = new Set(['w', 'h', 'fps', 'duration', 'start', 'end', 'seed', 'timeout', 'frame-timeout', 'live-for']);
 	const strs = new Set(['sketch', 'frames-dir', 'params']);
 	for (let i = 0; i < argv.length; i++) {
 		const k = argv[i].replace(/^--/, '');
 		if (!argv[i].startsWith('--')) throw new UsageError(`unexpected argument '${argv[i]}'`);
+		if (k === 'live') { a.live = true; continue; }
 		const v = argv[++i];
 		if (v === undefined) throw new UsageError(`missing value for --${k}`);
 		if (ints.has(k)) {
 			const n = Number(v);
 			if (!Number.isFinite(n)) throw new UsageError(`--${k} must be a number, got '${v}'`);
-			a[k === 'frame-timeout' ? 'frameTimeout' : k] = Math.trunc(n);
+			a[{ 'frame-timeout': 'frameTimeout', 'live-for': 'liveFor' }[k] || k] = Math.trunc(n);
 		} else if (strs.has(k)) a[k === 'frames-dir' ? 'framesDir' : k] = v;
 		else throw new UsageError(`unknown option --${k}`);
 	}
 	if (!a.sketch) throw new UsageError('--sketch is required');
-	if (!a.framesDir) throw new UsageError('--frames-dir is required');
+	if (!a.framesDir && !a.live) throw new UsageError('--frames-dir is required');
 	for (const k of ['w', 'h', 'fps', 'duration']) if (a[k] < 1) throw new UsageError(`--${k} must be >= 1`);
 	const total = a.fps * a.duration;
 	if (a.end < 0 || a.end >= total) a.end = total - 1;
 	if (a.start < 0 || a.start > a.end) throw new UsageError(`--start ${a.start} is outside 0..${a.end}`);
 	a.sketch = path.resolve(a.sketch);
-	a.framesDir = path.resolve(a.framesDir);
+	if (a.framesDir) a.framesDir = path.resolve(a.framesDir);
 	if (!fs.existsSync(a.sketch)) throw new UsageError(`sketch not found: ${a.sketch}`);
 	if (a.params) {
 		try { a.paramsData = JSON.parse(fs.readFileSync(path.resolve(a.params), 'utf8')); }
@@ -53,9 +54,11 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'applica
 	'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
 	'.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2', '.txt': 'text/plain', '.csv': 'text/csv' };
 
-function shellHtml() {
+function shellHtml(live) {
+	// Live preview scales the (possibly 4k) canvas down to fit the window, keeping aspect ratio.
+	const fit = live ? 'canvas{width:auto!important;height:auto!important;max-width:100vw;max-height:100vh;display:block;margin:auto}' : '';
 	return `<!doctype html><html><head><meta charset="utf-8">
-<style>html,body{margin:0;padding:0;background:#000;overflow:hidden}</style>
+<style>html,body{margin:0;padding:0;background:#000;overflow:hidden}${fit}</style>
 <script src="/harness.js"></script>
 <script src="/p5.js"></script>
 <script src="/sketch.js"></script>
@@ -69,7 +72,7 @@ function startServer(args) {
 	const sketchDir = path.dirname(args.sketch);
 	const p5Path = path.join(HERE, 'node_modules', 'p5', 'lib', 'p5.min.js');
 	const fixed = {
-		'/': () => ['text/html', shellHtml()],
+		'/': () => ['text/html', shellHtml(args.live)],
 		'/harness.js': () => ['text/javascript', fs.readFileSync(path.join(HERE, 'harness.js'))],
 		'/harness-post.js': () => ['text/javascript', fs.readFileSync(path.join(HERE, 'harness-post.js'))],
 		'/p5.js': () => ['text/javascript', fs.readFileSync(p5Path)],
@@ -115,10 +118,16 @@ async function main() {
 		throw new UsageError('web engine not installed. Run: make setup-web');
 	const { default: puppeteer } = await import('puppeteer');
 
-	fs.mkdirSync(args.framesDir, { recursive: true });
+	if (args.framesDir) fs.mkdirSync(args.framesDir, { recursive: true });
 	const server = await startServer(args);
 	const port = server.address().port;
-	const browser = await puppeteer.launch({ headless: true, args: ['--hide-scrollbars', '--mute-audio', '--enable-unsafe-swiftshader'] });
+	// Live preview opens a visible window sized to fit a laptop screen (canvas is scaled by CSS);
+	// FC_LIVE_HEADLESS=1 runs the same loop without a window, for tests.
+	const scale = Math.min(1, 1100 / args.w, 760 / args.h);
+	const pw = Math.round(args.w * scale), ph = Math.round(args.h * scale);
+	const browser = await puppeteer.launch(args.live
+		? { headless: !!process.env.FC_LIVE_HEADLESS, defaultViewport: null, args: [`--window-size=${pw},${ph + 90}`, '--mute-audio', '--enable-unsafe-swiftshader'] }
+		: { headless: true, args: ['--hide-scrollbars', '--mute-audio', '--enable-unsafe-swiftshader'] });
 
 	let rejectFailure;
 	const failure = new Promise((_, rej) => { rejectFailure = rej; });
@@ -128,7 +137,7 @@ async function main() {
 
 	try {
 		const page = await browser.newPage();
-		await page.setViewport({ width: args.w, height: args.h, deviceScaleFactor: 1 });
+		if (!args.live) await page.setViewport({ width: args.w, height: args.h, deviceScaleFactor: 1 });
 		page.on('pageerror', (e) => fail(tidy(e.stack || e.message || e)));
 		page.on('response', (r) => {
 			if (r.status() >= 400) fail(`missing file: ${r.url().replace(/^http:\/\/127\.0\.0\.1:\d+/, '')} (${r.status()}). Assets load relative to the sketch's directory`);
@@ -140,7 +149,7 @@ async function main() {
 		});
 		await page.evaluateOnNewDocument((cfg) => { window.__FC__ = cfg; }, {
 			w: args.w, h: args.h, fps: args.fps, duration: args.duration,
-			seed: args.seed, start: args.start, params: args.paramsData,
+			seed: args.seed, start: args.start, params: args.paramsData, live: !!args.live,
 		});
 
 		const guard = (p) => Promise.race([p, failure]);
@@ -155,6 +164,19 @@ async function main() {
 		} catch (e) {
 			if (e instanceof SketchError) throw e;
 			throw new SketchError(stuck);
+		}
+
+		if (args.live) {
+			// Run until the window is closed, Ctrl+C, a sketch error, or --live-for ms (tests).
+			console.log(`live preview of ${path.basename(path.dirname(args.sketch))} at ${args.fps} fps, looping every ${args.duration}s. Close the window or press Ctrl+C to stop.`);
+			const closed = new Promise((res) => browser.on('disconnected', res));
+			const timer = args.liveFor ? new Promise((res) => setTimeout(res, args.liveFor)) : new Promise(() => {});
+			await guard(Promise.race([closed, timer]));
+			if (args.liveFor && !process.env.FC_QUIET) {
+				const n = await page.evaluate(() => window.__liveFrames).catch(() => 0);
+				console.log(`live frames stepped: ${n}`);
+			}
+			return;
 		}
 
 		for (let f = args.start; f <= args.end; f++) {

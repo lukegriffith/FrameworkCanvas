@@ -38,7 +38,24 @@
 		if (window.width !== ctx.w || window.height !== ctx.h) window.createCanvas(ctx.w, ctx.h);
 		window.noLoop();
 		window.__ready = true;
+		if (window.__FC__.live) startLive();
 	};
+
+	// Live preview: step frames in real time, looping the clip forever. Same draw path as
+	// rendering (frame index -> ctx), so what you see is what the render will produce.
+	function startLive() {
+		const cfg = window.__FC__;
+		const total = Math.max(1, Math.round(cfg.fps * cfg.duration));
+		const t0 = performance.now();
+		let last = -1;
+		window.__liveFrames = 0;
+		const tick = () => {
+			const f = Math.floor((performance.now() - t0) / 1000 * cfg.fps) % total;
+			if (f !== last) { const err = window.__step(f); if (err) throw new Error(err); last = f; window.__liveFrames++; }
+			requestAnimationFrame(tick);
+		};
+		requestAnimationFrame(tick);
+	}
 
 	// Opaque black backdrop so transparent canvases export the same way the OF lane
 	// clears to black, and ffmpeg never has to guess about alpha.

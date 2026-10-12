@@ -60,6 +60,11 @@ Where things land (all under `out/<name>/`, git-ignored):
 | `make video` | `<name>.mp4`, or `<name>_<format>.mp4` with `FORMAT=` |
 | `make gif` | `<name>.gif`, or `<name>_<format>.gif` |
 
+Live preview: `make run SKETCH=<name>` opens a window that loops the sketch in real time.
+C++ sketches get an openFrameworks window (press `r` to record); web sketches get a Chromium
+window (close it or press Ctrl+C to stop). This is for humans; agents should use `sheet`,
+`frame` and `draft`.
+
 `SKETCH` defaults to `demo`. Nested names work: `SKETCH=_examples/particles`.
 `make help` lists everything. The `overriding commands for target 'help'` warnings
 printed by make are harmless noise from openFrameworks.

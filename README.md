@@ -27,8 +27,9 @@ cd FrameworkCanvas
 # Check/locate your openFrameworks install (run this once after cloning)
 make setup
 
-# Interactive mode - opens a window for real-time creativity
-make run
+# Interactive mode - opens a live window that loops your sketch in real time
+make run                    # default C++ sketch
+make run SKETCH=web-demo    # a web (p5.js) sketch
 
 # Look at your work before rendering
 make sheet     # contact sheet of the whole animation -> out/demo/sheet.png
@@ -187,7 +188,9 @@ Which lane to use: web (p5.js) for most 2D work, C++ for custom shaders and heav
 A 10-run comparison is in [docs/bakeoff.md](docs/bakeoff.md). Run `make test-web` to self-test
 the web engine.
 
-## 🎯 Interactive Mode Features (C++ lane)
+## 🎯 Interactive Mode Features
+
+`make run SKETCH=<name>` previews any sketch live. Web sketches open a Chromium window that loops the clip at its real frame rate (the canvas is scaled to fit your screen). The extras below are C++ lane only.
 
 - **Real-time Preview**: See your art as you create it
 - **Manual Recording**: Press 'r' to start recording anytime
