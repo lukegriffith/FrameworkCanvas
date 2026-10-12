@@ -171,7 +171,7 @@ async function main() {
 			fs.writeFileSync(path.join(args.framesDir, `frame_${String(f).padStart(6, '0')}.png`),
 				Buffer.from(data.split(',')[1], 'base64'));
 		}
-		console.log(`rendered ${args.end - args.start + 1} frames to ${args.framesDir}`);
+		if (!process.env.FC_QUIET) console.log(`rendered ${args.end - args.start + 1} frames to ${args.framesDir}`);
 	} finally {
 		// A page blocked in an infinite loop can ignore a polite close; don't wait long, then kill.
 		await Promise.race([browser.close().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
