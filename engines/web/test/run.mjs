@@ -63,6 +63,14 @@ function draw(){ if (ctx.frame === 5) console.log('CTX ' + JSON.stringify({t: ct
 }
 
 {
+	// frameCount is pinned to frame + 1 (p5's convention) wherever rendering starts.
+	const sk = sketch('fc', `function setup(){ createCanvas(10,10); } function draw(){ if (ctx.frame === 6) console.log('FC ' + frameCount); }`);
+	const r0 = render(sk, path.join(tmp, 'fc0'), ['--start', '0', '--end', '6']);
+	const r1 = render(sk, path.join(tmp, 'fc1'), ['--start', '6', '--end', '6']);
+	check('frameCount is frame + 1 from any start frame', /FC 7/.test(r0.stdout) && /FC 7/.test(r1.stdout), r0.stdout + r1.stdout);
+}
+
+{
 	// Hard-coded createCanvas size and pixelDensity are overridden to the requested output size.
 	const sk = sketch('size', `function setup(){ createCanvas(800, 600); pixelDensity(2); } function draw(){ background(200); }`);
 	const out = path.join(tmp, 'size');

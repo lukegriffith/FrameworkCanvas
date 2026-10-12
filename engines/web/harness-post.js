@@ -47,6 +47,10 @@
 	// (puppeteer's evaluate() would otherwise drop it).
 	window.__step = function (f) {
 		window.__setFrame(f);
+		// p5 increments frameCount inside redraw(), and also counts its own (ignored) startup
+		// draw. Pin it so frameCount === ctx.frame + 1 inside draw(), p5's convention, no
+		// matter where rendering starts.
+		window.p5.instance._setProperty('frameCount', f);
 		allow = true;
 		try { window.redraw(); return null; }
 		catch (e) { return String((e && e.stack) || e); }
