@@ -27,8 +27,9 @@ Platform limits to keep in mind: Reels and Shorts want 15 to 60 s, GIFs get huge
 make video SKETCH=<n> FORMAT=<f> [VIDEO_DURATION=<s>] [SEED=<n>]
 ```
 
-Output: `out/<n>/<n>_<f>.mp4` (or `.gif`). Frames are rendered uncapped, so a 10 s
-1080p clip takes seconds, not 10 s.
+Output: `out/<n>/<n>_<f>.mp4` (or `.gif`). Works for both lanes (web `sketch.js`,
+C++ `sketch.cpp`). Frames are rendered uncapped, so a 10 s 1080p clip takes seconds to
+a few tens of seconds, not real time. Web lane needs `make setup-web` once.
 
 ## Verify (always)
 

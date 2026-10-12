@@ -8,7 +8,8 @@ FrameworkCanvas combines the power of openFrameworks with a streamlined make-bas
 
 ## ✨ Features
 
-- **Dual-Mode Operation**: Switch between interactive app and video/GIF recording modes
+- **Two Render Lanes**: write sketches in p5.js (`sketch.js`, headless Chromium) or openFrameworks C++ (`sketch.cpp`); same commands, same outputs
+- **Dual-Mode Operation**: Switch between interactive app and video/GIF recording modes (C++ lane)
 - **Zero-Config Media Generation**: Frame-by-frame TGA export with automatic MP4/GIF creation
 - **Multiple Output Formats**: Generate high-quality MP4 videos or web-friendly animated GIFs
 - **Artist-Friendly Workflow**: Simple `make art` commands with preset formats
@@ -46,8 +47,10 @@ make 4k        # 3840x2160 for high quality
 make square    # 1080x1080 for general social media
 ```
 
-Your art lives in `sketches/<name>/sketch.cpp`. Start from `sketches/_template`, or copy
-an example from `sketches/_examples/`. Select a sketch with `SKETCH=<name>`
+Your art lives in `sketches/<name>/sketch.js` (p5.js) or `sketches/<name>/sketch.cpp`
+(openFrameworks). Start from `sketches/_template-web` or `sketches/_template`, or copy
+an example from `sketches/_examples/`. The file name picks the render lane. For the web
+lane run `make setup-web` once first. Select a sketch with `SKETCH=<name>`
 (default `demo`). See [CLAUDE.md](CLAUDE.md) for the full workflow, which is written to
 work equally well for people and for coding agents.
 
@@ -132,6 +135,7 @@ FFMPEG = ffmpeg
 - **openFrameworks 0.12.1+** - [Download here](https://openframeworks.cc/download/)
 - **Xcode Command Line Tools** - `xcode-select --install`
 - **FFmpeg** - `brew install ffmpeg` (for video generation)
+- **Node 20+** - only for the web (p5.js) lane; then run `make setup-web`
 - **C++17 compatible compiler**
 
 ## 📁 Project Structure
@@ -139,14 +143,18 @@ FFMPEG = ffmpeg
 ```
 FrameworkCanvas/
 ├── sketches/
-│   ├── demo/                # default sketch (+ params.json)
-│   ├── _template/           # copy this to start a new sketch
-│   └── _examples/           # particles, noise-field, shader, type
+│   ├── demo/                # default C++ sketch (+ params.json)
+│   ├── web-demo/            # default web (p5.js) sketch
+│   ├── _template/           # C++ template
+│   ├── _template-web/       # web template
+│   └── _examples/           # C++: particles, noise-field, shader, type; web: web-particles, web-noise
 ├── src/
 │   ├── Sketch.h             # the sketch contract (Ctx + Sketch)
 │   └── harness/             # app, recorder, settings: not for sketch authors
+├── engines/web/             # web lane: puppeteer driver + p5 harness (not for sketch authors)
 ├── docs/
 │   ├── OF_CHEATSHEET.md     # openFrameworks 0.12.1 gotchas
+│   ├── P5_NOTES.md          # p5.js under the harness
 │   └── LLM_READINESS_PLAN.md
 ├── out/                     # renders (git-ignored): out/<sketch>/...
 ├── config.make              # project configuration
@@ -200,6 +208,26 @@ The app reads these environment variables (set by Makefile):
 - `SEED`, `RENDER_START`, `RENDER_END`, `PARAMS_FILE`, `FRAMES_DIR` - set by the Makefile; see CLAUDE.md
 
 ### Writing a sketch
+
+Web (p5.js) lane:
+
+```bash
+make setup-web                                  # once
+cp -r sketches/_template-web sketches/mything
+make check  SKETCH=mything      # syntax check + render frame 0, prints OK or the error
+make sheet  SKETCH=mything      # open out/mything/sheet.png
+make video  SKETCH=mything FORMAT=instagram-story
+```
+
+```js
+function setup() { createCanvas(ctx.w, ctx.h); }
+function draw() {
+  background(10);
+  circle(width / 2, height / 2, min(width, height) * (0.3 + 0.05 * sin(ctx.progress * TWO_PI)));
+}
+```
+
+C++ (openFrameworks) lane:
 
 ```bash
 cp -r sketches/_template sketches/mything

@@ -1,6 +1,6 @@
 ---
 name: new-sketch
-description: Create a new FrameworkCanvas sketch (looping video/GIF art) from a brief, then iterate on it by looking at rendered contact sheets until it is right. Use when asked to make, generate or prototype a visual, animation, loop, or social-media asset in this repo.
+description: Create a new FrameworkCanvas sketch (looping video/GIF art, p5.js or openFrameworks) from a brief, then iterate on it by looking at rendered contact sheets until it is right. Use when asked to make, generate or prototype a visual, animation, loop, or social-media asset in this repo.
 ---
 
 # New sketch
@@ -8,20 +8,28 @@ description: Create a new FrameworkCanvas sketch (looping video/GIF art) from a 
 Goal: turn a brief into `sketches/<name>/sketch.cpp` and check it by looking at images
 of its output, not by guessing.
 
-## 1. Read first (once)
+## 1. Pick a lane, then read first (once)
 
-- `CLAUDE.md` for the `Ctx` contract and rules.
-- `docs/OF_CHEATSHEET.md` if the sketch needs anything beyond circles and lines.
-- The closest example in `sketches/_examples/`: `particles` (stateless motion, trails),
-  `noise-field` (flow lines, looping noise), `shader` (GLSL), `type` (text).
+Default to the **web lane** (p5.js, `sketch.js`) for 2D work. Use the **C++ lane**
+(openFrameworks, `sketch.cpp`) for custom GLSL shaders or very heavy per-frame work.
+`CLAUDE.md` has the details. Both lanes use the same make commands below.
+
+- `CLAUDE.md` for the `ctx` contract and rules (both lanes).
+- Web: `docs/P5_NOTES.md`. C++: `docs/OF_CHEATSHEET.md`.
+- The closest example in `sketches/_examples/`: `web-particles`, `web-noise` (web);
+  `particles`, `noise-field`, `shader`, `type` (C++).
+- Web lane not set up yet? Run `make setup-web` once (needs Node 20+).
 
 ## 2. Scaffold
 
-Pick a short kebab-case name. Never reuse `demo` or a name starting with `_`.
+Pick a short kebab-case name. Never reuse `demo`, `web-demo` or a name starting with `_`.
 
 ```bash
-cp -r sketches/_template sketches/<name>
+cp -r sketches/_template-web sketches/<name>     # web lane
+cp -r sketches/_template sketches/<name>         # C++ lane
 ```
+
+A directory has exactly one of `sketch.js` / `sketch.cpp`.
 
 Decide before coding: duration (default 10 s), format (`FORMAT=`, default 1920x1080),
 palette, and what loops. Put non-default values in `sketches/<name>/params.json` or pass
@@ -30,7 +38,7 @@ palette, and what loops. Put non-default values in `sketches/<name>/params.json`
 ## 3. Write, then loop until it looks right
 
 ```bash
-make check SKETCH=<name>     # must print OK. Fix compile errors, rerun.
+make check SKETCH=<name>     # must print OK. Fix errors, rerun (web: syntax + a real frame 0 render).
 make smoke SKETCH=<name>     # must pass. Fails on blank output.
 make sheet SKETCH=<name> FORMAT=<final format>
 ```
@@ -57,7 +65,8 @@ Then follow the `render` skill to verify the file.
 
 ## Do not
 
-- Edit `src/` to make a sketch work.
-- Use `ofGetFrameNum()`, `ofGetElapsedTimef()` or the clock for animation.
+- Edit `src/` or `engines/` to make a sketch work.
+- Animate from `ofGetFrameNum()`, `ofGetElapsedTimef()`, `Date.now()`, `performance.now()`
+  or any clock. Use `ctx.t` / `ctx.progress`.
 - Declare it done after `check` alone. Always look at a sheet.
 - Commit `out/` (git-ignored) or leave stray scratch sketches in `sketches/`.

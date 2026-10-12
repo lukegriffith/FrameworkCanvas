@@ -156,7 +156,8 @@ endif
 help:
 	@echo "FrameworkCanvas: write a sketch, look at it, ship it."
 	@echo ""
-	@echo "First time: make setup        (check/locate OF_ROOT)"
+	@echo "First time: make setup        (C++ lane: check/locate OF_ROOT)"
+	@echo "            make setup-web    (web lane: install p5 + headless Chromium)"
 	@echo ""
 	@echo "Agent loop (SKETCH=<name> picks sketches/<name>/, default demo):"
 	@echo "  make check            compile only; prints OK or filtered errors"
@@ -170,7 +171,7 @@ help:
 	@echo "Interactive: make run   (press r to record)"
 	@echo ""
 	@echo "Options (any target):"
-	@echo "  SKETCH=name           which sketch (default: $(SKETCH))"
+	@echo "  SKETCH=name           which sketch (default: $(SKETCH)); sketch.js = web lane, sketch.cpp = C++ lane"
 	@echo "  FORMAT=name           $(subst :, ,$(foreach f,$(FORMATS),$(firstword $(subst :, ,$(f)))))"
 	@echo "  VIDEO_WIDTH/HEIGHT/FPS/DURATION   current: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT) @ $(VIDEO_FPS)fps, $(VIDEO_DURATION)s"
 	@echo "  SEED=n                random seed (default 1)"
