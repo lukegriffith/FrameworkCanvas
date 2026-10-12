@@ -72,8 +72,8 @@ in `sketches/_bakeoff/<brief>-<lane>/`; render one with e.g.
 | B5 grid | C++ | pass | pass | 1 / 1 | 41 | 32.4k | 5 | yes (1.13) |
 
 \* Not a sketch failure. The agent put all its make options into one shell variable, zsh did not
-split it, and make reported a confusing "both sketch.cpp and sketch.js" error. Five of the
-first six agents hit this. It was fixed afterwards in the Makefile (`SKETCH` must now be a
+split it, and make reported a confusing "both sketch.cpp and sketch.js" error. All six agents in the
+first batch hit this. It was fixed afterwards in the Makefile (`SKETCH` must now be a
 single word, with a clear message), and the later C++ prompts warned against it, which is why
 "raw first check" differs between the lanes. "Real first check" is the first check that actually
 ran the sketch, taken from the agent's own report.
