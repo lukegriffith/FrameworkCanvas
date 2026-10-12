@@ -99,6 +99,25 @@ function draw(){ if (ctx.frame === 5) console.log('CTX ' + JSON.stringify({t: ct
 	check('bad arguments exit 2', r3.status === 2, r3.stderr);
 }
 
+{
+	// Every js block in docs/P5_NOTES.md must actually run. `js` blocks are draw() fragments,
+	// `js sketch` blocks are complete sketches.
+	const doc = fs.readFileSync(path.join(HERE, '..', '..', '..', 'docs', 'P5_NOTES.md'), 'utf8');
+	const blocks = [...doc.matchAll(/```(js sketch|js)\n([\s\S]*?)```/g)].map((m) => ({ full: m[1] === 'js sketch', code: m[2] }));
+	// Tiny PNG for the asset example: 1x1 red.
+	const dotPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64');
+	let n = 0, bad = [];
+	for (const b of blocks) {
+		const code = b.full ? b.code : `function setup(){ createCanvas(ctx.w, ctx.h); }\nfunction draw(){\n${b.code}\n}`;
+		const sk = sketch('doc' + n, code);
+		fs.writeFileSync(path.join(path.dirname(sk), 'dot.png'), dotPng);
+		const r = render(sk, path.join(tmp, 'docout' + n), ['--start', '5', '--end', '5']);
+		if (r.status !== 0) bad.push(`block ${n}: ${r.stderr.trim().split('\n')[0]}`);
+		n++;
+	}
+	check(`all ${blocks.length} snippets in docs/P5_NOTES.md run`, blocks.length >= 8 && bad.length === 0, bad.join(' | '));
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(failed ? `\n${failed} check(s) failed` : '\nall web engine checks passed');
 process.exit(failed ? 1 : 0);
