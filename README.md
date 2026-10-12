@@ -147,7 +147,8 @@ FrameworkCanvas/
 │   ├── web-demo/            # default web (p5.js) sketch
 │   ├── _template/           # C++ template
 │   ├── _template-web/       # web template
-│   └── _examples/           # C++: particles, noise-field, shader, type; web: web-particles, web-noise
+│   ├── _examples/           # C++: particles, noise-field, shader, type; web: web-particles, web-noise
+│   └── _bakeoff/            # the 10 sketches from the lane comparison
 ├── src/
 │   ├── Sketch.h             # the sketch contract (Ctx + Sketch)
 │   └── harness/             # app, recorder, settings: not for sketch authors
@@ -155,7 +156,9 @@ FrameworkCanvas/
 ├── docs/
 │   ├── OF_CHEATSHEET.md     # openFrameworks 0.12.1 gotchas
 │   ├── P5_NOTES.md          # p5.js under the harness
-│   └── LLM_READINESS_PLAN.md
+│   ├── bakeoff.md           # web vs C++ lane comparison and results
+│   ├── LLM_READINESS_PLAN.md
+│   └── WEB_ENGINE_PLAN.md
 ├── out/                     # renders (git-ignored): out/<sketch>/...
 ├── config.make              # project configuration
 ├── Makefile                 # build + media workflow
@@ -164,21 +167,27 @@ FrameworkCanvas/
 
 ## 🎥 How Media Generation Works
 
+Both lanes produce numbered frames, then share the same ffmpeg steps.
+
 ### Video (MP4)
-1. **Frame Generation**: App renders offscreen as fast as it can, saving each frame as uncompressed TGA
+1. **Frame Generation**: C++ lane: the app renders offscreen as fast as it can and saves each frame as uncompressed TGA. Web lane: headless Chromium steps the p5 sketch frame by frame and saves PNGs. Time comes from the frame index in both, so rendering speed never changes the result.
 2. **H.264 Encoding**: FFmpeg converts frames to high-quality MP4 with H.264 codec
 3. **Cleanup**: Temporary frames are automatically removed
-4. **Output**: Final video saved to project directory
+4. **Output**: Final video saved to `out/<sketch>/`
 
 ### GIF Animation  
-1. **Frame Generation**: Same TGA frame sequence as video
+1. **Frame Generation**: Same frame sequence as video
 2. **Palette Optimization**: FFmpeg generates optimal color palette for better quality
 3. **GIF Encoding**: Two-pass process creates smooth, web-optimized animated GIF
 4. **Cleanup**: Temporary frames and palette files removed automatically
 
 The demo animation features rotating colorful circles - perfect for testing or as a starting point for your own creations.
 
-## 🎯 Interactive Mode Features
+Which lane to use: web (p5.js) for most 2D work, C++ for custom shaders and heavy compute.
+A 10-run comparison is in [docs/bakeoff.md](docs/bakeoff.md). Run `make test-web` to self-test
+the web engine.
+
+## 🎯 Interactive Mode Features (C++ lane)
 
 - **Real-time Preview**: See your art as you create it
 - **Manual Recording**: Press 'r' to start recording anytime
