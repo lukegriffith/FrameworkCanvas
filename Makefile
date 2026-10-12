@@ -136,7 +136,7 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke setup-web test-web
 
 # Default help target
 help:
@@ -218,6 +218,12 @@ setup:
 	fi; \
 	exit 1; \
 	'
+
+# Install the web engine (headless Chromium + p5). Safe to rerun; no-op when up to date.
+setup-web:
+	@command -v node >/dev/null || { echo "Node 20+ is required: brew install node"; exit 1; }
+	@cd engines/web && if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --loglevel=error; else npm install --no-audit --no-fund --loglevel=error; fi
+	@cd engines/web && node -e "import('puppeteer').then(async p=>console.log('chromium:', await p.default.executablePath()))"
 
 # Quiet build: prints nothing on success, filtered compiler errors on failure.
 # All media targets depend on this instead of Release so their output stays short
