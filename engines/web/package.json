@@ -1,0 +1,12 @@
+{
+  "name": "frameworkcanvas-web-engine",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless p5.js renderer for FrameworkCanvas. Not for sketch authors.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "p5": "1.11.13",
+    "puppeteer": "25.13.0"
+  }
+}

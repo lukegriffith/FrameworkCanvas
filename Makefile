@@ -85,8 +85,25 @@ export VIDEO_DURATION
 # Only the chosen sketch directory is compiled and linked alongside src/.
 ################################################################################
 SKETCH ?= demo
-ifeq ($(wildcard sketches/$(SKETCH)/sketch.cpp),)
-$(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp)
+# Guard against passing several options as one word (e.g. a shell variable holding
+# "SKETCH=x FORMAT=y" that some shells do not split), which otherwise gives a baffling error.
+ifneq ($(words $(SKETCH)),1)
+  $(error SKETCH must be a single name, got '$(SKETCH)'. Pass each option as its own argument: make check SKETCH=name FORMAT=square)
+endif
+# A sketch is either C++ (sketch.cpp, openFrameworks lane) or JavaScript (sketch.js, web/p5 lane).
+HAS_CPP := $(wildcard sketches/$(SKETCH)/sketch.cpp)
+HAS_JS  := $(wildcard sketches/$(SKETCH)/sketch.js)
+ifneq ($(HAS_CPP),)
+  ifneq ($(HAS_JS),)
+    $(error sketches/$(SKETCH) has both sketch.cpp and sketch.js: keep only one)
+  endif
+  ENGINE := of
+  FRAME_EXT := tga
+else ifneq ($(HAS_JS),)
+  ENGINE := web
+  FRAME_EXT := png
+else
+  $(error sketch '$(SKETCH)' not found: expected sketches/$(SKETCH)/sketch.cpp or sketch.js)
 endif
 export SKETCH
 # Sketches may be nested (e.g. _examples/particles); filenames use the last component
@@ -114,8 +131,10 @@ endif
 # .d files name the sketch source they came from. If that sketch is renamed or deleted,
 # the stale .d makes every later build fail with "No rule to make target .../sketch.cpp".
 # Clear them whenever the selected sketch changes. Cheap: only the sketch recompiles.
+ifeq ($(ENGINE),of)
 ifneq ($(shell cat obj/.sketch 2>/dev/null),$(SKETCH))
   SKETCH_OBJ_RESET := $(shell find obj -mindepth 3 -maxdepth 3 \( -name '*.o' -o -name '*.d' \) -delete 2>/dev/null; mkdir -p obj; printf '%s' '$(SKETCH)' > obj/.sketch)
+endif
 endif
 
 # Per-sketch output: out/<sketch>/ holds frames and finished media
@@ -136,13 +155,14 @@ endif
 # DIGITAL ART WORKFLOW TARGETS
 ################################################################################
 
-.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke
+.PHONY: video gif clean-frames clean-video clean-gif record art help setup check build frame sheet draft smoke setup-web test-web
 
 # Default help target
 help:
 	@echo "FrameworkCanvas: write a sketch, look at it, ship it."
 	@echo ""
-	@echo "First time: make setup        (check/locate OF_ROOT)"
+	@echo "First time: make setup        (C++ lane: check/locate OF_ROOT)"
+	@echo "            make setup-web    (web lane: install p5 + headless Chromium)"
 	@echo ""
 	@echo "Agent loop (SKETCH=<name> picks sketches/<name>/, default demo):"
 	@echo "  make check            compile only; prints OK or filtered errors"
@@ -156,7 +176,7 @@ help:
 	@echo "Interactive: make run   (press r to record)"
 	@echo ""
 	@echo "Options (any target):"
-	@echo "  SKETCH=name           which sketch (default: $(SKETCH))"
+	@echo "  SKETCH=name           which sketch (default: $(SKETCH)); sketch.js = web lane, sketch.cpp = C++ lane"
 	@echo "  FORMAT=name           $(subst :, ,$(foreach f,$(FORMATS),$(firstword $(subst :, ,$(f)))))"
 	@echo "  VIDEO_WIDTH/HEIGHT/FPS/DURATION   current: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT) @ $(VIDEO_FPS)fps, $(VIDEO_DURATION)s"
 	@echo "  SEED=n                random seed (default 1)"
@@ -219,6 +239,31 @@ setup:
 	exit 1; \
 	'
 
+# Install the web engine (headless Chromium + p5). Safe to rerun; no-op when up to date.
+setup-web:
+	@command -v node >/dev/null || { echo "Node 20+ is required: brew install node"; exit 1; }
+	@cd engines/web && if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --loglevel=error; else npm install --no-audit --no-fund --loglevel=error; fi
+	@cd engines/web && node -e "import('puppeteer').then(async p=>console.log('chromium:', await p.default.executablePath()))"
+
+# Web engine self-tests (determinism, ctx contract, error handling)
+test-web:
+	@node engines/web/test/run.mjs
+
+# Engine dispatch: produce frame_NNNNNN.$(FRAME_EXT) files in $(FRAMES_DIR).
+#   $(call render_frames,WIDTH,HEIGHT,FPS,START,END)   (END=-1 means "to the end")
+# Everything after this step (ffmpeg, sheets, smoke) is shared between engines.
+ifeq ($(ENGINE),web)
+BUILD_DEP :=
+render_frames = { [ -d engines/web/node_modules ] || { echo "web engine not installed: run make setup-web"; exit 1; }; } && \
+	FC_QUIET=1 node engines/web/render.mjs --sketch sketches/$(SKETCH)/sketch.js --frames-dir $(FRAMES_DIR) \
+		--w $(1) --h $(2) --fps $(3) --duration $(VIDEO_DURATION) --start $(4) --end $(5) \
+		--seed $(or $(SEED),1) $(if $(PARAMS_FILE),--params $(PARAMS_FILE))
+else
+BUILD_DEP := build
+render_frames = OUTPUT_TYPE=video VIDEO_WIDTH=$(1) VIDEO_HEIGHT=$(2) VIDEO_FPS=$(3) RENDER_START=$(4) RENDER_END=$(5) \
+	./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null
+endif
+
 # Quiet build: prints nothing on success, filtered compiler errors on failure.
 # All media targets depend on this instead of Release so their output stays short
 # (OF's Release target prints hundreds of lines on every run, even when up to date).
@@ -229,19 +274,31 @@ build:
 		exit 1; \
 	fi
 
-# Compile only. Prints OK on success. For fast edit/compile loops.
+# Fast edit loop. Prints OK on success, a short error otherwise.
+#   OF lane:  compile only.
+#   Web lane: syntax check, then render frame 0 at low resolution (there is no compiler,
+#             so actually running the sketch is the real check).
+ifeq ($(ENGINE),web)
+check:
+	@out=$$(node --check sketches/$(SKETCH)/sketch.js 2>&1) || { echo "$$out" | grep -v '^    at \|^Node.js\|^$$' | head -8; exit 1; }
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR)
+	@$(call render_frames,$(SMOKE_WIDTH),$(SMOKE_HEIGHT),$(SMOKE_FPS),0,0) || { rm -rf $(FRAMES_DIR); exit 1; }
+	@rm -rf $(FRAMES_DIR)
+	@echo "OK"
+else
 check: build
 	@echo "OK"
+endif
 
 # Render a single still at time T (seconds) to out/<sketch>/frame_<T>.png
 T ?= 0
-frame: build
+frame: $(BUILD_DEP)
 	@F=$$(awk 'BEGIN{printf "%d", $(T)*$(VIDEO_FPS)+0.5}'); \
 	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
 	if [ $$F -ge $$TOTAL ]; then echo "T=$(T) is past the end ($(VIDEO_DURATION)s)"; exit 1; fi; \
 	rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
-	OUTPUT_TYPE=video RENDER_START=$$F RENDER_END=$$F ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
-	$(FFMPEG) -y -v error -i $(FRAMES_DIR)/frame_$$(printf %06d $$F).tga -frames:v 1 $(OUT_DIR)/frame_$(T).png || exit 1; \
+	$(call render_frames,$(VIDEO_WIDTH),$(VIDEO_HEIGHT),$(VIDEO_FPS),$$F,$$F) || exit 1; \
+	$(FFMPEG) -y -v error -i $(FRAMES_DIR)/frame_$$(printf %06d $$F).$(FRAME_EXT) -frames:v 1 $(OUT_DIR)/frame_$(T).png || exit 1; \
 	rm -rf $(FRAMES_DIR); \
 	echo "✅ Frame saved as $(OUT_DIR)/frame_$(T).png (frame $$F)"
 
@@ -251,9 +308,9 @@ N ?= 8
 SHEET_COLS ?= 4
 SHEET_CELL_WIDTH ?= 480
 SHEET_FONT ?= /System/Library/Fonts/Menlo.ttc
-sheet: build
+sheet: $(BUILD_DEP)
 	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
-	OUTPUT_TYPE=video RENDER_START=0 RENDER_END= ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || exit 1; \
+	$(call render_frames,$(VIDEO_WIDTH),$(VIDEO_HEIGHT),$(VIDEO_FPS),0,-1) || exit 1; \
 	TOTAL=$$(( $(VIDEO_DURATION) * $(VIDEO_FPS) )); \
 	SEL=""; k=0; while [ $$k -lt $(N) ]; do SEL="$$SEL+eq(n,$$(( k * TOTAL / $(N) )))"; k=$$(( k + 1 )); done; \
 	ROWS=$$(( ($(N) + $(SHEET_COLS) - 1) / $(SHEET_COLS) )); \
@@ -261,7 +318,7 @@ sheet: build
 	if [ -f "$(SHEET_FONT)" ]; then \
 		LABEL="drawtext=fontfile=$(SHEET_FONT):text='%{pts\\:hms}':x=12:y=12:fontsize=$$(( $(VIDEO_WIDTH) / 20 )):fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=6,"; \
 	fi; \
-	$(FFMPEG) -y -v error -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.tga \
+	$(FFMPEG) -y -v error -framerate $(VIDEO_FPS) -i $(FRAMES_DIR)/frame_%06d.$(FRAME_EXT) \
 		-vf "select='0$$SEL',$${LABEL}scale=$(SHEET_CELL_WIDTH):-2,tile=$(SHEET_COLS)x$$ROWS:padding=4:color=gray" \
 		-frames:v 1 -update 1 $(OUT_DIR)/sheet.png || exit 1; \
 	rm -rf $(FRAMES_DIR); \
@@ -282,14 +339,13 @@ draft:
 SMOKE_WIDTH ?= 320
 SMOKE_FPS ?= 10
 SMOKE_HEIGHT = $(shell awk 'BEGIN{printf "%d", int($(SMOKE_WIDTH)*$(VIDEO_HEIGHT)/$(VIDEO_WIDTH)/2+0.5)*2}')
-smoke: build
+smoke: $(BUILD_DEP)
 	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR); \
-	OUTPUT_TYPE=video VIDEO_WIDTH=$(SMOKE_WIDTH) VIDEO_HEIGHT=$(SMOKE_HEIGHT) VIDEO_FPS=$(SMOKE_FPS) RENDER_START=0 RENDER_END= \
-		./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME) >/dev/null || { echo "smoke: app failed to run"; exit 1; }; \
+	$(call render_frames,$(SMOKE_WIDTH),$(SMOKE_HEIGHT),$(SMOKE_FPS),0,-1) || { echo "smoke: render failed"; exit 1; }; \
 	TOTAL=$$(( $(VIDEO_DURATION) * $(SMOKE_FPS) )); \
 	flat=0; checked=0; \
 	for F in 0 $$(( TOTAL / 2 )) $$(( TOTAL - 1 )); do \
-		FILE=$(FRAMES_DIR)/frame_$$(printf %06d $$F).tga; \
+		FILE=$(FRAMES_DIR)/frame_$$(printf %06d $$F).$(FRAME_EXT); \
 		[ -f "$$FILE" ] || { echo "smoke: frame $$F was not written"; rm -rf $(FRAMES_DIR); exit 1; }; \
 		STATS=$$($(FFMPEG) -v error -i $$FILE -vf "signalstats,metadata=print:file=-" -f null - 2>&1); \
 		RANGE=0; \
@@ -305,35 +361,35 @@ smoke: build
 	echo "✅ smoke OK ($$(( checked - flat ))/$$checked sampled frames have content)"
 
 # Build and run for video recording
-video: build
+video: $(BUILD_DEP)
 	@echo "🎬 Starting video recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(VIDEO_FILENAME)"
 	@echo ""
-	@mkdir -p $(FRAMES_DIR)
-	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR)
+	@$(call render_frames,$(VIDEO_WIDTH),$(VIDEO_HEIGHT),$(VIDEO_FPS),$(RENDER_START),$(or $(RENDER_END),-1))
 	@echo ""
 	@echo "🔧 Creating MP4 with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.$(FRAME_EXT) -c:v libx264 -pix_fmt yuv420p -crf 18 -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:fullrange=off" $(OUT_DIR)/$(VIDEO_FILENAME)
 	@echo "✅ Video saved as $(OUT_DIR)/$(VIDEO_FILENAME)"
 	@$(MAKE) clean-frames
 
 # Build and run for GIF recording
-gif: build
+gif: $(BUILD_DEP)
 	@echo "🎨 Starting GIF recording..."
 	@echo "   Resolution: $(VIDEO_WIDTH)x$(VIDEO_HEIGHT)"
 	@echo "   Framerate:  $(VIDEO_FPS) fps"
 	@echo "   Duration:   $(VIDEO_DURATION) seconds"
 	@echo "   Output:     $(GIF_FILENAME)"
 	@echo ""
-	@mkdir -p $(FRAMES_DIR)
-	@export OUTPUT_TYPE=video VIDEO_WIDTH=$(VIDEO_WIDTH) VIDEO_HEIGHT=$(VIDEO_HEIGHT) VIDEO_FPS=$(VIDEO_FPS) VIDEO_DURATION=$(VIDEO_DURATION) && ./bin/$(APPNAME).app/Contents/MacOS/$(APPNAME)
+	@rm -rf $(FRAMES_DIR); mkdir -p $(FRAMES_DIR)
+	@$(call render_frames,$(VIDEO_WIDTH),$(VIDEO_HEIGHT),$(VIDEO_FPS),$(RENDER_START),$(or $(RENDER_END),-1))
 	@echo ""
 	@echo "🔧 Creating GIF with ffmpeg..."
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
-	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.tga -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.$(FRAME_EXT) -vf "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos,palettegen" -t $(VIDEO_DURATION) $(OUT_DIR)/palette.png
+	@$(FFMPEG) -y -framerate $(VIDEO_FPS) -start_number $(RENDER_START) -i $(FRAMES_DIR)/frame_%06d.$(FRAME_EXT) -i $(OUT_DIR)/palette.png -filter_complex "fps=$(VIDEO_FPS),scale=$(VIDEO_WIDTH):$(VIDEO_HEIGHT):flags=lanczos[x];[x][1:v]paletteuse" -t $(VIDEO_DURATION) $(OUT_DIR)/$(GIF_FILENAME)
 	@rm -f $(OUT_DIR)/palette.png
 	@echo "✅ GIF saved as $(OUT_DIR)/$(GIF_FILENAME)"
 	@$(MAKE) clean-frames

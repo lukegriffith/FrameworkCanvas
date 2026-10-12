@@ -4,17 +4,39 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 
 ## What this is
 
-FrameworkCanvas turns openFrameworks (C++) into a generator for social-media video
-and GIF art. You write ONE file, `sketches/<name>/sketch.cpp`. The harness handles
-windows, timing, frame capture and ffmpeg. Never edit `src/harness/` or `src/Sketch.h`
-to make a sketch work; if the harness seems wrong, say so instead.
+FrameworkCanvas is a generator for social-media video and GIF art. You write ONE file
+per asset, in one of two languages ("lanes"), and the harness handles timing, frame
+capture and ffmpeg:
+
+- `sketches/<name>/sketch.js`  : **web lane**, p5.js in headless Chromium
+- `sketches/<name>/sketch.cpp` : **C++ lane**, openFrameworks
+
+Never edit `src/harness/`, `src/Sketch.h` or `engines/` to make a sketch work; if the
+harness seems wrong, say so instead.
+
+## Which lane?
+
+The file name decides: `sketch.js` runs in the web lane, `sketch.cpp` in the C++ lane
+(having both is an error). Every `make` target below works identically in both lanes.
+
+| Pick | When |
+|---|---|
+| Web (`sketch.js`) | Default for 2D canvas work: shapes, particles, type, generative patterns, noise fields, anything p5 does. No compile step, fastest to iterate, p5 is what you know best. |
+| C++ (`sketch.cpp`) | Custom GLSL shaders (GL 2.1), heavy per-frame maths or very large particle counts, or work already written against openFrameworks. |
+
+Evidence: in a 10-run comparison (`docs/bakeoff.md`) both lanes were equally reliable and
+cost the same effort; web output scored higher on quality (4.4 vs 3.6 out of 5). It did not
+test shader-heavy work.
+
+First time using the web lane: `make setup-web` (installs Node packages and Chromium
+under `engines/web/`; needs Node 20+). Then `cp -r sketches/_template-web sketches/<name>`.
 
 ## The loop (do this for every new asset)
 
 ```bash
-cp -r sketches/_template sketches/<name>      # 1. scaffold (or copy an example)
-# edit sketches/<name>/sketch.cpp
-make check  SKETCH=<name>                     # 2. compile. Prints OK or filtered errors
+cp -r sketches/_template-web sketches/<name>  # 1. scaffold (C++: sketches/_template). Or copy an example
+# edit sketches/<name>/sketch.js (or sketch.cpp)
+make check  SKETCH=<name>                     # 2. C++: compile. Web: syntax check + render frame 0. Prints OK or the error
 make smoke  SKETCH=<name>                     # 3. fails if the output is blank
 make sheet  SKETCH=<name>                     # 4. LOOK at out/<name>/sheet.png
 make frame  SKETCH=<name> T=2.5               #    optional: one full-size still
@@ -69,10 +91,31 @@ Guarantees: `draw` runs with a black, cleared, anti-aliased canvas of `ctx.w` x 
 origin top-left, current colour white. Interactive mode and video mode call `draw`
 with identical semantics, so the animation looks the same in both.
 
+### The same contract in the web lane
+
+`ctx` is a read-only global with the same fields (`w h t progress frame fps duration seed
+recording params`). A sketch is ordinary global-mode p5.js:
+
+```js
+function setup() { createCanvas(ctx.w, ctx.h); }   // size arguments are ignored: the canvas is always ctx.w x ctx.h
+function draw() {
+  background(10);
+  circle(width / 2, height / 2, min(width, height) * (0.3 + 0.05 * sin(ctx.progress * TWO_PI)));
+}
+```
+
+The harness seeds `random()`, `noise()` and `Math.random()` from `SEED`, fixes
+`pixelDensity` at 1, makes `millis()` equal `ctx.t * 1000` and `frameCount` equal
+`ctx.frame + 1`. `Date.now()` is not patched. Differences from the C++ lane: p5 does not
+clear the canvas between frames (call `background()`), and `noise()` is 3D (loop it by
+moving the sample point around a circle). Read `docs/P5_NOTES.md` before writing a
+web sketch beyond the basics.
+
 ## Rules for good sketches
 
-1. **Animate from `ctx.t` / `ctx.progress`.** Never `ofGetFrameNum()`, `ofGetElapsedTimef()`
-   or the clock: they differ between app mode (60 fps window) and video mode (30 fps).
+1. **Animate from `ctx.t` / `ctx.progress`.** Never `ofGetFrameNum()`, `ofGetElapsedTimef()`,
+   `Date.now()`, `performance.now()` or the clock: they differ between app mode (60 fps
+   window) and video mode (30 fps) and are not reproducible.
 2. **Loop seamlessly.** `progress` wraps, so `sin(ctx.progress * TWO_PI * k)` with integer
    `k` returns to its start. Non-integer `k` does not loop. For noise, walk a circle
    in extra dimensions (see `_examples/noise-field`).
@@ -84,7 +127,7 @@ with identical semantics, so the animation looks the same in both.
    skipped. Check those with `make sheet` / `make draft` instead.
 5. **Randomness is reproducible.** `ofRandom`/`ofNoise` are seeded from `SEED` (default 1).
    Generate random data in `setup()`, not `draw()`, so it does not flicker.
-6. **Load assets in `setup()`**, never in `draw()`.
+6. **Load assets in `setup()`** (web: `preload()`), never in `draw()`.
 7. **Do not change `ctx.duration`-relative timing to make drafts faster.** `make draft`
    already keeps the full duration and lowers resolution and frame rate instead.
 
@@ -106,10 +149,13 @@ Keep anything that multiplies `ctx.progress * TWO_PI` an integer, or the loop wi
 
 ## Reference material
 
-- `docs/OF_CHEATSHEET.md` : openFrameworks 0.12.1 API gotchas, compile-checked snippets,
-  common errors. Read before writing non-trivial drawing code.
-- `sketches/_template/` : minimal commented skeleton.
-- `sketches/_examples/particles` : stateless seeded particles with trails, perfect loop.
+- `docs/OF_CHEATSHEET.md` : (C++ lane) openFrameworks 0.12.1 API gotchas, compile-checked
+  snippets, common errors. Read before writing non-trivial drawing code.
+- `docs/P5_NOTES.md` : (web lane) what the harness changes about p5, looping recipes,
+  trails, WEBGL, assets, every error message you can see. Every snippet is tested.
+- `sketches/_template/` (C++) and `sketches/_template-web/` (web) : minimal commented skeletons.
+- `sketches/_examples/web-particles`, `web-noise` : web ports of the particle and noise-field examples.
+- `sketches/_examples/particles` : (C++) stateless seeded particles with trails, perfect loop.
 - `sketches/_examples/noise-field` : looping noise flow lines, any aspect ratio.
 - `sketches/_examples/shader` : fullscreen GLSL (`#version 120`) with embedded source.
 - `sketches/_examples/type` : animated text using the system font.
@@ -141,6 +187,13 @@ an openFrameworks 0.12.1 install (`make setup` helps find it).
   `FORMAT` table. Media targets depend on `build`, which prints nothing unless compilation fails.
 - Record mode runs uncapped (no vsync, no frame-rate limit); time comes from the frame
   index, so rendering speed never changes the result.
+- `engines/web/` : the web lane. `render.mjs` (puppeteer driver, CLI mirrors the C++ binary's
+  env vars), `harness.js` / `harness-post.js` (browser side: `ctx`, seeding, forced canvas
+  size, frame stepping), `test/run.mjs` (`make test-web`: determinism, contract, error
+  handling, and every snippet in `docs/P5_NOTES.md`). p5 and puppeteer versions are pinned
+  in `package.json`; the lock file is committed so renders are reproducible. Frames are PNG
+  here (the C++ lane writes TGA); ffmpeg assembly is shared. The Makefile picks the lane
+  via `ENGINE`/`FRAME_EXT` and calls the `render_frames` macro.
 
 ### Frame capture format
 Frames are saved as uncompressed TGA, not PNG. PNG's zlib compression is the
@@ -163,6 +216,7 @@ to `bin/data/`; that is intended.)
 
 - openFrameworks 0.12.1+, Xcode Command Line Tools, C++17 compiler
 - FFmpeg (`brew install ffmpeg`), with `drawtext` for sheet time labels (default brew build has it)
+- Web lane only: Node 20+ and `make setup-web`
 
 ## Commit message guidelines
 

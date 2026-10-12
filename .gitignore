@@ -48,3 +48,6 @@ out/
 *.mp4
 *.gif
 !small.gif
+
+# Web engine
+engines/web/node_modules/
