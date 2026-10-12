@@ -225,6 +225,10 @@ setup-web:
 	@cd engines/web && if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --loglevel=error; else npm install --no-audit --no-fund --loglevel=error; fi
 	@cd engines/web && node -e "import('puppeteer').then(async p=>console.log('chromium:', await p.default.executablePath()))"
 
+# Web engine self-tests (determinism, ctx contract, error handling)
+test-web:
+	@node engines/web/test/run.mjs
+
 # Quiet build: prints nothing on success, filtered compiler errors on failure.
 # All media targets depend on this instead of Release so their output stays short
 # (OF's Release target prints hundreds of lines on every run, even when up to date).
