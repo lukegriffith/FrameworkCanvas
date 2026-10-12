@@ -71,6 +71,17 @@ function draw(){ if (ctx.frame === 5) console.log('CTX ' + JSON.stringify({t: ct
 }
 
 {
+	// Live preview (headless here): steps frames in real time and exits cleanly; sketch errors still fail it.
+	const sk = sketch('live', `function setup(){ createCanvas(10,10); } function draw(){ background(frameCount % 255); }`);
+	const r = spawnSync('node', [RENDER, '--live', '--live-for', '2000', '--sketch', sk, '--w', '64', '--h', '64', '--fps', '20', '--duration', '2'], { encoding: 'utf8', env: { ...process.env, FC_LIVE_HEADLESS: '1' } });
+	const n = Number((r.stdout.match(/live frames stepped: (\d+)/) || [])[1]);
+	check('--live steps frames in real time and exits 0', r.status === 0 && n >= 20 && n <= 50, `status=${r.status} frames=${n} ${r.stderr}`);
+	const badLive = sketch('livebad', `function setup(){ createCanvas(10,10); } function draw(){ if (ctx.frame > 3) nope(); }`);
+	const r2 = spawnSync('node', [RENDER, '--live', '--live-for', '4000', '--sketch', badLive, '--w', '64', '--h', '64', '--fps', '20', '--duration', '2'], { encoding: 'utf8', env: { ...process.env, FC_LIVE_HEADLESS: '1' } });
+	check('--live reports a draw error and exits 1', r2.status === 1 && /nope is not defined/.test(r2.stderr), `status=${r2.status} ${r2.stderr}`);
+}
+
+{
 	// Hard-coded createCanvas size and pixelDensity are overridden to the requested output size.
 	const sk = sketch('size', `function setup(){ createCanvas(800, 600); pixelDensity(2); } function draw(){ background(200); }`);
 	const out = path.join(tmp, 'size');
